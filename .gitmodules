@@ -1,0 +1,4 @@
+[submodule "submodules/libae-valkey"]
+	path = submodules/libae-valkey
+	url = https://github.com/vproxy-tools/libae-valkey
+	branch = vproxy

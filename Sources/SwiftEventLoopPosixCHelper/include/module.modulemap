@@ -1,0 +1,4 @@
+module SwiftEventLoopPosixCHelper {
+    header "../c_helper.h"
+    export *
+}

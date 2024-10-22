@@ -1,0 +1,24 @@
+{
+  "originHash" : "e8b3b02c73b905533e81f0dfa03cc9e25c87dc20ddf9593d0ddd4f623332e8c2",
+  "pins" : [
+    {
+      "identity" : "swift-collections",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-collections.git",
+      "state" : {
+        "branch" : "1.1.4",
+        "revision" : "671108c96644956dddcd89dd59c203dcdb36cec7"
+      }
+    },
+    {
+      "identity" : "swiftpriorityqueue",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/davecom/SwiftPriorityQueue.git",
+      "state" : {
+        "branch" : "1.4.0",
+        "revision" : "42e8789c6d2464254c2e0322bd824ec509de678b"
+      }
+    }
+  ],
+  "version" : 3
+}
