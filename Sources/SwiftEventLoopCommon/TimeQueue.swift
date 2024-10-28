@@ -43,7 +43,7 @@ class TimeQueueImpl<T>: TimeQueue {
             return Int.max
         }
         let triggerTime = elem.triggerTime
-        return max(Int(triggerTime - currentTimeMillis), 0)
+        return max(Int(triggerTime) - Int(currentTimeMillis), 0)
     }
 }
 

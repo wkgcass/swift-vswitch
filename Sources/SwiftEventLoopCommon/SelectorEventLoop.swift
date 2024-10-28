@@ -278,8 +278,8 @@ public class SelectorEventLoop {
         return e
     }
 
-    public func period(periodMillis: Int, _ r: @escaping Runnable) -> PeriodicEvent {
-        let pe = PeriodicEvent(runnable: r, loop: self, periodMillis: periodMillis)
+    public func period(intervalMillis: Int, _ r: @escaping Runnable) -> PeriodicEvent {
+        let pe = PeriodicEvent(runnable: r, loop: self, intervalMillis: intervalMillis)
         pe.start()
         return pe
     }

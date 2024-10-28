@@ -7,7 +7,7 @@ public class TimerEvent {
         self.eventLoop = eventLoop
     }
 
-    public func setEvent(_ event: any TimeElem) {
+    func setEvent(_ event: any TimeElem) {
         if canceled {
             event.removeSelf() // this is invoked on event loop, so it's safe
             return

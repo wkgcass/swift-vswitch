@@ -7,10 +7,10 @@ public class PeriodicEvent {
     private var running = false
     private var te: TimerEvent?
 
-    init(runnable: @escaping Runnable, loop: SelectorEventLoop, periodMillis: Int) {
+    init(runnable: @escaping Runnable, loop: SelectorEventLoop, intervalMillis: Int) {
         self.runnable = runnable
         self.loop = loop
-        delay = periodMillis
+        delay = intervalMillis
     }
 
     // No need to handle concurrency of this function
@@ -38,7 +38,7 @@ public class PeriodicEvent {
         }
     }
 
-    func cancel() {
+    public func cancel() {
         running = false
         if let te {
             te.cancel()
