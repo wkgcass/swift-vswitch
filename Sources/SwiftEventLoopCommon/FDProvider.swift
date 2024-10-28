@@ -46,13 +46,7 @@ public struct SelectorOptions: Sendable {
     public internal(set) var coreAffinity: Int64 = -1
     public internal(set) var epfd = 0
 
-    init() {}
-
-    init(opts: SelectorOptions) {
-        preferPoll = opts.preferPoll
-        coreAffinity = opts.coreAffinity
-        epfd = opts.epfd
-    }
+    public init() {}
 }
 
 public protocol Thread {
@@ -76,20 +70,4 @@ public class ThreadHandle: Equatable {
     }
 }
 
-public class Runnable {
-    private let runnable: (() throws -> Void)?
-    public init() {
-        runnable = nil
-    }
-
-    public init(_ runnable: @escaping () throws -> Void) {
-        self.runnable = runnable
-    }
-
-    public func run() throws {
-        if runnable == nil {
-            return
-        }
-        try runnable!()
-    }
-}
+public typealias Runnable = () throws -> Void

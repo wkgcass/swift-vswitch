@@ -18,7 +18,7 @@ struct TestTCP {
 
         let serverFD = try FDProvider.get().openIPv4Tcp()
         serverFD.configureBlocking(false)
-        try serverFD.setOption(BuiltInSocketOptions.SO_REUSEPORT, true)
+        try serverFD.setOption(SockOpts.SO_REUSEPORT, true)
         try serverFD.bind(GetIPPort(from: "127.0.0.1:29944")!)
         try selector.register(serverFD, ops: EventSet.read(), attachment: nil)
 
@@ -29,7 +29,7 @@ struct TestTCP {
         var clientIsConnected = false
 
         var selectedEntry: [SelectedEntry] = Arrays.newArray(capacity: 16)
-        var buf: [UInt8] = Arrays.newArray(capacity: 1024)
+        var buf: [UInt8] = Arrays.newArray(capacity: 1024, uninitialized: true)
 
         var receivedData = [String](repeating: "", count: 0)
 
@@ -71,7 +71,7 @@ struct TestTCP {
                 if fire.ready.have(.READABLE) {
                     var len = try fire.fd.read(buf, len: buf.capacity)
                     if len > 0 {
-                        var cchars: [CChar] = Arrays.newArray(capacity: len + 1)
+                        var cchars: [CChar] = Arrays.newArray(capacity: len + 1, uninitialized: true)
                         memcpy(&cchars, buf, len)
                         cchars[len] = 0
                         receivedData.append(String(cString: &cchars))

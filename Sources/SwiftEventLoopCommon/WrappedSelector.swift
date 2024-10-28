@@ -21,7 +21,6 @@ public class WrappedSelector: FDSelector {
     private var virtualSocketFDs = [VirtualFDHandle: REntry]()
     private var readableFired = Set<FDHandle>()
     private var writableFired = Set<FDHandle>()
-    private let SELECTOR_OPERATION_LOCK = Lock()
 
     public init(selector: FDSelector) {
         self.selector = selector
@@ -40,7 +39,7 @@ public class WrappedSelector: FDSelector {
                 break
             }
 
-            let fd = fdHandle.fd()
+            let fd = fdHandle.fd
 
             var readable = false
             var writable = false
@@ -90,8 +89,6 @@ public class WrappedSelector: FDSelector {
     }
 
     public func wakeup() {
-        SELECTOR_OPERATION_LOCK.lock()
-        defer { SELECTOR_OPERATION_LOCK.unlock() }
         selector.wakeup()
     }
 
@@ -191,7 +188,7 @@ public class WrappedSelector: FDSelector {
         }
 
         for (fd, entry) in virtualSocketFDs {
-            ret.append(RegisterEntry(fd: fd.fd(), eventSet: entry.watchedEvents, attachment: entry.attachment))
+            ret.append(RegisterEntry(fd: fd.fd, eventSet: entry.watchedEvents, attachment: entry.attachment))
         }
 
         return ret

@@ -17,7 +17,7 @@ struct TestUDP {
         let selector = try FDProvider.get().openSelector()
 
         let listenUdp = try FDProvider.get().openIPv6Udp()
-        try listenUdp.setOption(BuiltInSocketOptions.SO_REUSEPORT, true)
+        try listenUdp.setOption(SockOpts.SO_REUSEPORT, true)
         listenUdp.configureBlocking(false)
         try listenUdp.bind(GetIPPort(from: "[::1]:33445")!)
 
@@ -29,7 +29,7 @@ struct TestUDP {
         try selector.register(clientUdp, ops: EventSet.write(), attachment: nil)
 
         var selectedEntry: [SelectedEntry] = Arrays.newArray(capacity: 16)
-        var buf: [UInt8] = Arrays.newArray(capacity: 1024)
+        var buf: [UInt8] = Arrays.newArray(capacity: 1024, uninitialized: true)
         var clientIsSent = false
 
         var receivedData = [String](repeating: "", count: 0)
@@ -53,7 +53,7 @@ struct TestUDP {
                     let len = try fire.fd.read(buf, len: buf.capacity)
 
                     if len > 0 {
-                        var cchars: [CChar] = Arrays.newArray(capacity: len + 1)
+                        var cchars: [CChar] = Arrays.newArray(capacity: len + 1, uninitialized: true)
                         memcpy(&cchars, buf, len)
                         cchars[len] = 0
                         receivedData.append(String(cString: &cchars))
@@ -73,7 +73,7 @@ struct TestUDP {
                     #expect((fire.fd as! any UdpFD).localAddress.description == "[::1]:33445")
 
                     if len > 0 {
-                        var cchars: [CChar] = Arrays.newArray(capacity: len + 1)
+                        var cchars: [CChar] = Arrays.newArray(capacity: len + 1, uninitialized: true)
                         memcpy(&cchars, buf, len)
                         cchars[len] = 0
                         receivedData.append(String(cString: &cchars))

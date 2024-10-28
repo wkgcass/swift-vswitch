@@ -1,14 +1,14 @@
 public protocol Handler {
-    func readable(_ ctx: HandlerContext) throws
-    func writable(_ ctx: HandlerContext) throws
+    func readable(_ ctx: borrowing HandlerContext) throws
+    func writable(_ ctx: borrowing HandlerContext) throws
     // the SelectionKey is removed, or event loop is closed
-    func removed(_ ctx: HandlerContext) throws
+    func removed(_ ctx: borrowing HandlerContext) throws
 }
 
 public protocol TcpHandler: Handler {}
 
 public extension TcpHandler {
-    func fd(_ ctx: HandlerContext) -> any TcpFD {
+    func fd(_ ctx: borrowing HandlerContext) -> any TcpFD {
         return ctx.fd as! any TcpFD
     }
 }
@@ -16,12 +16,12 @@ public extension TcpHandler {
 public protocol UdpHandler: Handler {}
 
 public extension UdpHandler {
-    func fd(_ ctx: HandlerContext) -> any UdpFD {
+    func fd(_ ctx: borrowing HandlerContext) -> any UdpFD {
         return ctx.fd as! any UdpFD
     }
 }
 
-public struct HandlerContext {
+public struct HandlerContext: ~Copyable {
     public let eventLoop: SelectorEventLoop
     public let fd: any FD
     public let attachment: Any?

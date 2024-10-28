@@ -26,7 +26,7 @@ public class SelectorEventLoop {
         }
         selector = WrappedSelector(selector: fdSelector)
         self.fds = fds
-        initOptions = SelectorOptions(opts: opts)
+        initOptions = opts
     }
 
     public static func open() throws(IOException) -> SelectorEventLoop {
@@ -52,7 +52,7 @@ public class SelectorEventLoop {
 
     private func tryRunnable(_ r: Runnable) {
         do {
-            try r.run()
+            try r()
         } catch {
             Logger.error(.IMPROPER_USE, "exception thrown in nextTick event ", error)
         }
@@ -68,8 +68,8 @@ public class SelectorEventLoop {
         // only run available events when entering this function
         for _ in 0 ..< len {
             let r = runOnLoopEvents.pop()
-            if r != nil {
-                tryRunnable(r!)
+            if let r {
+                tryRunnable(r)
             }
         }
     }
@@ -125,10 +125,10 @@ public class SelectorEventLoop {
 
     private func release() {
         let entries = THE_KEY_SET_BEFORE_SELECTOR_CLOSE
-        if entries == nil {
+        guard let entries else {
             return
         }
-        for e in entries! {
+        for e in entries {
             let channel = e.0
             let att = e.1
             triggerRemovedCallback(channel, att)
@@ -219,8 +219,10 @@ public class SelectorEventLoop {
         }
 
         // set thread
-        runningThread = fds.currentThread()!
-        runningThread!.setLoop(shouldBeCalledFromSelectorEventLoop: self)
+        runningThread = fds.currentThread()
+        if let runningThread {
+            runningThread.setLoop(shouldBeCalledFromSelectorEventLoop: self)
+        }
         // run
         while selector.isOpen() {
             if onePoll() == -1 {
@@ -234,24 +236,23 @@ public class SelectorEventLoop {
     }
 
     private func needWake() -> Bool {
-        if runningThread == nil {
-            // not running yet
-            return false
-        }
-        let current = fds.currentThread()
-        if current == nil {
-            // not running on vproxy thread, we don't know whether they are on the same thread
-            // so need wake
+        guard let runningThread else {
+            // not running yet or not running on vproxy thread
             return true
         }
-        return current!.handle() == runningThread!.handle()
+        let current = fds.currentThread()
+        guard let current else {
+            // not running on vproxy thread
+            return true
+        }
+        return current.handle() != runningThread.handle()
     }
 
     private func wakeup() {
         selector.wakeup()
     }
 
-    public func nextTick(_ r: Runnable) {
+    public func nextTick(_ r: @escaping Runnable) {
         runOnLoopEvents.push(r)
         if !needWake() {
             return // we do not need to wakeup because it's not started or is already waken up
@@ -259,7 +260,7 @@ public class SelectorEventLoop {
         wakeup() // wake the selector because new event is added
     }
 
-    public func runOnLoop(_ r: Runnable) {
+    public func runOnLoop(_ r: @escaping Runnable) {
         if !needWake() {
             tryRunnable(r) // directly run if is already on the loop thread
         } else {
@@ -267,22 +268,18 @@ public class SelectorEventLoop {
         }
     }
 
-    public func runOnLoop(_ f: @escaping () -> Void) {
-        runOnLoop(Runnable { f() })
-    }
-
-    public func delay(_ timeout: Int, _ r: Runnable) -> TimerEvent {
+    public func delay(millis: Int, _ r: @escaping Runnable) -> TimerEvent {
         let e = TimerEvent(self)
         // timeQueue is not thread safe
         // modify it in the event loop's thread
-        nextTick(Runnable { e.setEvent(self.timeQueue.add(currentTimeMillis: Global.currentTimestamp,
-                                                          timeoutMillis: timeout,
-                                                          elem: r)) })
+        nextTick { e.setEvent(self.timeQueue.add(currentTimeMillis: Global.currentTimestamp,
+                                                 timeoutMillis: millis,
+                                                 elem: r)) }
         return e
     }
 
-    public func period(timeoutMillis: Int, _ r: Runnable) -> PeriodicEvent {
-        let pe = PeriodicEvent(runnable: r, loop: self, delayMillis: timeoutMillis)
+    public func period(periodMillis: Int, _ r: @escaping Runnable) -> PeriodicEvent {
+        let pe = PeriodicEvent(runnable: r, loop: self, periodMillis: periodMillis)
         pe.start()
         return pe
     }
@@ -296,9 +293,9 @@ public class SelectorEventLoop {
         let raw = Unmanaged.passRetained(registerData).toOpaque()
 
         if initOptions.preferPoll, needWake() {
-            runOnLoop(Runnable {
+            runOnLoop {
                 try self.selector.register(fd, ops: ops, attachment: raw)
-            })
+            }
             return
         }
         try selector.register(fd, ops: ops, attachment: raw)
@@ -310,9 +307,9 @@ public class SelectorEventLoop {
         }
 
         if initOptions.preferPoll, needWake() {
-            runOnLoop(Runnable {
+            runOnLoop {
                 self.selector.modify(fd, ops: ops)
-            })
+            }
             return
         }
 
@@ -342,11 +339,11 @@ public class SelectorEventLoop {
         }
 
         if initOptions.preferPoll, needWake() {
-            runOnLoop(Runnable {
+            runOnLoop {
                 let raw = self.selector.remove(fd)!
                 let att = Unmanaged<RegisterData>.fromOpaque(raw).takeRetainedValue()
                 self.triggerRemovedCallback(fd, att)
-            })
+            }
             return
         }
 
@@ -389,45 +386,44 @@ public class SelectorEventLoop {
         return !selector.isOpen()
     }
 
-    public func close() {
+    public func close(tryJoin: Bool = false) {
         if needWake() {
-            closeFromAnotherThread()
+            closeFromAnotherThread(tryJoin)
         } else {
-            closeWithoutConcurrency()
+            willClose = true
         }
     }
 
     private func closeWithoutConcurrency() {
-        willClose = true
+        willClose = true // ensure it's set
         let keys = selector.entries()
 
         THE_KEY_SET_BEFORE_SELECTOR_CLOSE = []
 
         for key in keys {
-            let att = Unmanaged<RegisterData>.fromOpaque(key.attachment!).takeUnretainedValue()
+            let att = Unmanaged<RegisterData>.fromOpaque(key.attachment!).takeRetainedValue()
             THE_KEY_SET_BEFORE_SELECTOR_CLOSE!.append((key.fd, att))
         }
 
         selector.close()
     }
 
-    private func closeFromAnotherThread() {
-        let runningThread = runningThread // get the thread, which will be joined later
-
+    private func closeFromAnotherThread(_ tryJoin: Bool) {
         runOnLoop {
             self.willClose = true
         }
-
-        if runningThread != nil {
-            runningThread!.join()
+        if tryJoin {
+            if let runningThread {
+                runningThread.join()
+            }
         }
     }
 
     private func runBeforePoll() -> Int {
-        if beforePollCallback == nil {
+        guard let beforePollCallback else {
             return -1
         }
-        return beforePollCallback!()
+        return beforePollCallback()
     }
 
     public func setBeforePoll(_ cb: @escaping () -> Int) {
@@ -435,13 +431,13 @@ public class SelectorEventLoop {
     }
 
     private func runAfterPoll() -> Bool {
-        if afterPollCallback == nil {
+        guard let afterPollCallback else {
             return false
         }
         let selector = selector.getSelector()
         let (num, arr) = selector.getFiredExtra()
 
-        return afterPollCallback!(num, arr)
+        return afterPollCallback(num, arr)
     }
 
     public func setAfterPoll(_ cb: @escaping (Int, UnsafePointer<FiredExtra>) -> Bool) {

@@ -5,11 +5,10 @@ import Glibc
 #endif
 
 public func GetIPPort(from: String) -> IPPort? {
-    let optindex = from.lastIndex(of: ":")
-    if optindex == nil {
+    let index = from.lastIndex(of: ":")
+    guard let index else {
         return nil
     }
-    let index = optindex!
 
     let ipPart = String(from[..<index])
     let portPart = String(from[from.index(index, offsetBy: 1)...])
@@ -19,13 +18,13 @@ public func GetIPPort(from: String) -> IPPort? {
         return nil
     }
     let port = UInt16(portPart)
-    if port == nil {
+    guard let port else {
         return nil
     }
     if let v4 = ip as? IPv4 {
-        return IPv4Port(v4, port!)
+        return IPv4Port(v4, port)
     } else {
-        return IPv6Port(ip as! IPv6, port!)
+        return IPv6Port(ip as! IPv6, port)
     }
 }
 
@@ -54,40 +53,33 @@ public extension IPPort {
         ret.sin6_port = port
         memcpy(&ret.sin6_addr, ip.bytes, ip.bytes.capacity)
         if ip is IPv6 {
-            return (socklen_t(MemoryLayout<sockaddr_in6>.size), ret)
+            return (socklen_t(MemoryLayout<sockaddr_in6>.stride), ret)
         } else {
-            return (socklen_t(MemoryLayout<sockaddr_in>.size), ret)
+            return (socklen_t(MemoryLayout<sockaddr_in>.stride), ret)
         }
     }
 }
 
 public struct IPv4Port: IPPort {
     private let ip_: IPv4
-    private let port_: UInt16
-    public init(_ ip_: IPv4, _ port_: UInt16) {
-        self.ip_ = ip_
-        self.port_ = port_
+    public var ip: IP { ip_ }
+    public let port: UInt16
+    public init(_ ip: IPv4, _ port: UInt16) {
+        ip_ = ip
+        self.port = port
     }
 
     public init(_ addr: sockaddr_in) {
         var xaddr = addr
-        var bytes: [UInt8] = Arrays.newArray(capacity: 4)
+        var bytes: [UInt8] = Arrays.newArray(capacity: 4, uninitialized: true)
         memcpy(&bytes, &xaddr.sin_addr.s_addr, 4)
         self.init(IPv4(bytes), Convert.reverseByteOrder(xaddr.sin_port))
-    }
-
-    public var ip: IP {
-        return ip_
-    }
-
-    public var port: UInt16 {
-        return port_
     }
 
     public func toSockAddr() -> sockaddr_in {
         var ret = sockaddr_in()
         ret.sin_family = sa_family_t(AF_INET)
-        let port = Convert.reverseByteOrder(port_)
+        let port = Convert.reverseByteOrder(port)
         ret.sin_port = port
         memcpy(&ret.sin_addr, ip_.bytes, 4)
         return ret
@@ -96,31 +88,24 @@ public struct IPv4Port: IPPort {
 
 public struct IPv6Port: IPPort {
     private let ip_: IPv6
-    private let port_: UInt16
-    public init(_ ip_: IPv6, _ port_: UInt16) {
-        self.ip_ = ip_
-        self.port_ = port_
+    public var ip: IP { ip_ }
+    public let port: UInt16
+    public init(_ ip: IPv6, _ port: UInt16) {
+        ip_ = ip
+        self.port = port
     }
 
     public init(_ addr: sockaddr_in6) {
         var xaddr = addr
-        var bytes: [UInt8] = Arrays.newArray(capacity: 16)
+        var bytes: [UInt8] = Arrays.newArray(capacity: 16, uninitialized: true)
         memcpy(&bytes, &xaddr.sin6_addr, 16)
         self.init(IPv6(bytes), Convert.reverseByteOrder(xaddr.sin6_port))
-    }
-
-    public var ip: IP {
-        return ip_
-    }
-
-    public var port: UInt16 {
-        return port_
     }
 
     public func toSockAddr() -> sockaddr_in6 {
         var ret = sockaddr_in6()
         ret.sin6_family = sa_family_t(AF_INET6)
-        let port = Convert.reverseByteOrder(port_)
+        let port = Convert.reverseByteOrder(port)
         ret.sin6_port = port
         memcpy(&ret.sin6_addr, ip_.bytes, 16)
         return ret

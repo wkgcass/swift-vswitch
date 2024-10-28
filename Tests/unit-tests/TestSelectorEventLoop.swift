@@ -35,7 +35,7 @@ struct TestSelectorEventLoop {
         thread.start()
 
         let tcp = try FDProvider.get().openIPv4Tcp()
-        try tcp.setOption(BuiltInSocketOptions.SO_REUSEPORT, true)
+        try tcp.setOption(SockOpts.SO_REUSEPORT, true)
         tcp.configureBlocking(false)
         try tcp.bind(GetIPPort(from: "127.0.0.1:22991")!)
 
@@ -61,7 +61,7 @@ class CtxForTest {
 }
 
 class TcpAcceptHandlerForTest: TcpHandler {
-    public func readable(_ ctx: HandlerContext) throws {
+    public func readable(_ ctx: borrowing HandlerContext) throws {
         let fd = try fd(ctx).accept()
         if fd == nil {
             return
@@ -69,11 +69,11 @@ class TcpAcceptHandlerForTest: TcpHandler {
         try ctx.eventLoop.add(fd!, ops: EventSet.read(), attachment: ctx.attachment, TcpEchoHandlerForTest(initiate: false))
     }
 
-    public func writable(_: HandlerContext) throws {
+    public func writable(_: borrowing HandlerContext) throws {
         // will never fire
     }
 
-    public func removed(_ ctx: HandlerContext) throws {
+    public func removed(_ ctx: borrowing HandlerContext) throws {
         ctx.fd.close()
     }
 }
@@ -89,10 +89,10 @@ class TcpEchoHandlerForTest: TcpHandler {
         }
     }
 
-    private var buf: [UInt8] = Arrays.newArray(capacity: 16)
+    private var buf: [UInt8] = Arrays.newArray(capacity: 16, uninitialized: true)
     private var dataLen = 0
 
-    public func readable(_ ctx: HandlerContext) throws {
+    public func readable(_ ctx: borrowing HandlerContext) throws {
         dataLen = try fd(ctx).read(buf, len: buf.capacity - 1)
         if dataLen < 0 {
             // EOF
@@ -114,7 +114,7 @@ class TcpEchoHandlerForTest: TcpHandler {
         }
     }
 
-    public func writable(_ ctx: HandlerContext) throws {
+    public func writable(_ ctx: borrowing HandlerContext) throws {
         if initiate {
             try fd(ctx).finishConnect()
             ctx.modify(EventSet.read())
@@ -123,7 +123,7 @@ class TcpEchoHandlerForTest: TcpHandler {
         _ = try fd(ctx).write(buf, len: dataLen)
     }
 
-    public func removed(_ ctx: HandlerContext) throws {
+    public func removed(_ ctx: borrowing HandlerContext) throws {
         ctx.fd.close()
         let c = ctx.attachment as! CtxForTest
         c.removedCount += 1

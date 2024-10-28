@@ -7,33 +7,29 @@ public class PeriodicEvent {
     private var running = false
     private var te: TimerEvent?
 
-    init(runnable: Runnable, loop: SelectorEventLoop, delayMillis: Int) {
+    init(runnable: @escaping Runnable, loop: SelectorEventLoop, periodMillis: Int) {
         self.runnable = runnable
         self.loop = loop
-        delay = delayMillis
+        delay = periodMillis
     }
 
     // No need to handle concurrency of this function
     // It's only called once and called on event loop
     func start() {
         running = true
-        te = loop.delay(delay, Runnable {
-            self.run()
-        })
+        te = loop.delay(millis: delay) { self.run() }
     }
 
     private func run() {
         if running {
             do {
-                try runnable.run()
+                try runnable()
             } catch {
                 Logger.error(.IMPROPER_USE, "error thrown in periodic event")
             }
             // At this time, it might be canceled
             if running {
-                te = loop.delay(delay, Runnable {
-                    self.run()
-                })
+                te = loop.delay(millis: delay) { self.run() }
             } else {
                 te = nil // Set to nil in case of concurrency
             }
@@ -44,8 +40,8 @@ public class PeriodicEvent {
 
     func cancel() {
         running = false
-        if te != nil {
-            te!.cancel()
+        if let te {
+            te.cancel()
         }
         te = nil
     }

@@ -6,8 +6,7 @@ public protocol FD<HandleType>: Equatable, Hashable {
     func isOpen() -> Bool
     func configureBlocking(_ b: Bool)
     func setOption<T>(_ name: SocketOption<T>, _ value: T) throws(IOException) -> Void
-    func close()
-    func real() -> any FD
+    func close() // NOTE: remember to release refcnt to handle
     func contains(_ fd: any FD) -> Bool
     func loopAware(_ loop: SelectorEventLoop) -> Bool
     func handle() -> HandleType
@@ -16,6 +15,16 @@ public protocol FD<HandleType>: Equatable, Hashable {
     func write(_ buf: [UInt8], off: Int, len: Int) throws(IOException) -> Int
     func read(_ buf: [UInt8], len: Int) throws(IOException) -> Int
     func read(_ buf: [UInt8], off: Int, len: Int) throws(IOException) -> Int
+}
+
+public extension FD {
+    func loopAware(_: SelectorEventLoop) -> Bool {
+        return true
+    }
+
+    static func == (lhs: any FD, rhs: any FD) -> Bool {
+        return lhs.handle() == rhs.handle()
+    }
 }
 
 public protocol InetFD: FD {
@@ -27,8 +36,15 @@ public protocol InetFD: FD {
 
 public protocol StreamFD: InetFD {
     func accept() throws(IOException) -> (any StreamFD)?
-    func finishConnect() throws(IOException)
     func shutdownOutput()
+}
+
+let BUF_FOR_FINISH_CONNECT: [UInt8] = Arrays.newArray(capacity: 1, uninitialized: true)
+
+public extension StreamFD {
+    func finishConnect() throws(IOException) {
+        _ = try write(BUF_FOR_FINISH_CONNECT, len: 0)
+    }
 }
 
 public protocol TcpFD: StreamFD {}
@@ -42,38 +58,24 @@ public protocol DatagramFD: InetFD {
 
 public protocol UdpFD: DatagramFD {}
 
-public extension FD {
-    func loopAware(_: SelectorEventLoop) -> Bool {
-        return true
-    }
-
-    static func == (lhs: any FD, rhs: any FD) -> Bool {
-        return lhs.handle() == rhs.handle()
-    }
-}
-
 public protocol VirtualFD: FD where HandleType: VirtualFDHandle {
     func onRegister()
     func onRemove()
 }
 
 public class FDHandle: Equatable, Hashable {
-    let fd_: any FD
+    public let fd: any FD
 
     public init(_ fd: any FD) {
-        fd_ = fd
-    }
-
-    public func fd() -> any FD {
-        return fd_
+        self.fd = fd
     }
 
     public var hashValue: Int {
-        fd_.hashValue
+        fd.hashValue
     }
 
     public func hash(into hasher: inout Hasher) {
-        fd_.hash(into: &hasher)
+        fd.hash(into: &hasher)
     }
 
     public static func == (lhs: FDHandle, rhs: FDHandle) -> Bool {

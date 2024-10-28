@@ -31,37 +31,31 @@ public func GetIP(from bytes: [UInt8]) -> IP? {
 }
 
 public struct IPv4: IP {
-    private let bytes_: [UInt8]
-    public var bytes: [UInt8] {
-        return bytes_
-    }
+    public let bytes: [UInt8]
 
     public init?(_ ip: String) {
-        bytes_ = Arrays.newArray(capacity: 4)
-        let err = inet_pton(AF_INET, ip, Arrays.getRaw(from: bytes_))
+        bytes = Arrays.newArray(capacity: 4, uninitialized: true)
+        let err = inet_pton(AF_INET, ip, Arrays.getRaw(from: bytes))
         if err == 0 {
             return nil
         }
     }
 
     init(_ bytes: [UInt8]) {
-        bytes_ = bytes
+        self.bytes = bytes
     }
 
     public var description: String {
         // 255.255.255.255\0
-        let str: [CChar] = Arrays.newArray(capacity: 16)
-        inet_ntop(AF_INET, bytes_, Arrays.getRaw(from: str), 16)
+        let str: [CChar] = Arrays.newArray(capacity: 16, uninitialized: true)
+        inet_ntop(AF_INET, bytes, Arrays.getRaw(from: str), 16)
         // should always succeed
         return String(cString: Arrays.getRaw(from: str))
     }
 }
 
 public struct IPv6: IP {
-    private let bytes_: [UInt8]
-    public var bytes: [UInt8] {
-        return bytes_
-    }
+    public let bytes: [UInt8]
 
     public init?(_ ip_: String) {
         var ip = ip_
@@ -74,7 +68,7 @@ public struct IPv6: IP {
             ip = String(ip[ip.index(l!, offsetBy: 1) ..< r!])
         }
 
-        bytes_ = Arrays.newArray(capacity: 16)
+        bytes = Arrays.newArray(capacity: 16, uninitialized: true)
         let err = inet_pton(AF_INET6, ip, Arrays.getRaw(from: bytes))
         if err == 0 {
             return nil
@@ -82,13 +76,13 @@ public struct IPv6: IP {
     }
 
     init(_ bytes: [UInt8]) {
-        bytes_ = bytes
+        self.bytes = bytes
     }
 
     public var description: String {
         // 1234:6789:1234:6789:1234:6789:1234:6789\0
-        let str: [CChar] = Arrays.newArray(capacity: 40)
-        inet_ntop(AF_INET6, bytes_, Arrays.getRaw(from: str), 40)
+        let str: [CChar] = Arrays.newArray(capacity: 40, uninitialized: true)
+        inet_ntop(AF_INET6, bytes, Arrays.getRaw(from: str), 40)
         // should always succeed
         return String(cString: Arrays.getRaw(from: str))
     }

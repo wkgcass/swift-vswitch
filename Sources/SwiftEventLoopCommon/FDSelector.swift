@@ -18,8 +18,8 @@ public protocol FDSelector {
 }
 
 public struct SelectedEntry {
-    private let fd_: (any FD)?
-    public var fd: any FD { return fd_! }
+    private var fd_: (any FD)?
+    public var fd: any FD { fd_! }
     public let ready: EventSet
     public let attachment: UnsafeMutableRawPointer?
     public init(fd: any FD, ready: EventSet, attachment: UnsafeMutableRawPointer?) {

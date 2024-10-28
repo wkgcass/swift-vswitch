@@ -22,10 +22,10 @@ class AESelector: FDSelector {
         }
         let ae = aeCreateEventLoop3(Int32(setsize), Int32(epfd), selectorFlags)
 
-        if ae == nil {
+        guard let ae else {
             throw IOException("failed to open ae event loop")
         }
-        self.ae = ae!
+        self.ae = ae
         fds = Arrays.newArray(capacity: setsize)
         var err = pipe(&pipeFDs)
         if err != 0 {
@@ -58,8 +58,7 @@ class AESelector: FDSelector {
     }
 
     func select(_ entries: inout [SelectedEntry]) throws(IOException) -> Int {
-        var tv = timeval(tv_sec: 24 * 3600, tv_usec: 0)
-        let nevents = aePoll(ae, &tv)
+        let nevents = aePoll(ae, nil)
         return handleFired(nevents, &entries)
     }
 
@@ -222,16 +221,13 @@ class AESelector: FDSelector {
 
     func entries() -> [RegisterEntry] {
         var ret = [RegisterEntry]()
-        for i in 0 ... ae.pointee.setsize - 1 {
-            let event = ae.pointee.events[Int(i)]
+        for i in 0 ..< fds.count {
+            guard let fd = fds[i] else {
+                continue
+            }
+            let event = ae.pointee.events[i]
             let mask = event.mask
-            if mask == 0 {
-                continue
-            }
-            if i == pipeFDs[0] {
-                continue
-            }
-            ret.append(RegisterEntry(fd: fds[Int(i)]!, eventSet: mask2ops(event.mask),
+            ret.append(RegisterEntry(fd: fd, eventSet: mask2ops(mask),
                                      attachment: event.clientData))
         }
         return ret

@@ -8,7 +8,7 @@ import SwiftEventLoopPosixCHelper
 import VProxyCommon
 
 public class PosixFDs: FDs, FDsWithOpts, FDsWithCoreAffinity {
-    var threadLocalKey = pthread_key_t()
+    private var threadLocalKey = pthread_key_t()
 
     private init() {
         pthread_key_create(&threadLocalKey, nil)
@@ -29,10 +29,10 @@ public class PosixFDs: FDs, FDsWithOpts, FDsWithCoreAffinity {
 
     public func currentThread() -> (any Thread)? {
         let raw = getThreadLocal()
-        if raw == nil {
+        guard let raw else {
             return nil
         }
-        let v = Unmanaged<PThread>.fromOpaque(raw!).takeUnretainedValue()
+        let v = Unmanaged<PThread>.fromOpaque(raw).takeUnretainedValue()
         return v
     }
 
@@ -119,12 +119,12 @@ public class PosixFD: FD {
         if T.self == Int.self {
             let iname = name as! SocketOption<Int>
             var n: Int = value as! Int
-            if iname == BuiltInSocketOptions.SO_LINGER {
+            if iname == SockOpts.SO_LINGER {
                 var lingerValue = linger(l_onoff: 1, l_linger: Int32(n))
-                let err = setsockopt(fd, SOL_SOCKET, SO_LINGER, &lingerValue, socklen_t(MemoryLayout<linger>.size))
+                let err = setsockopt(fd, SOL_SOCKET, SO_LINGER, &lingerValue, socklen_t(MemoryLayout<linger>.stride))
                 try handleSetSockOptErr(err, "failed to set linger \(value) to \(fd)")
                 return
-            } else if iname == BuiltInSocketOptions.SO_RCVBUF {
+            } else if iname == SockOpts.SO_RCVBUF {
                 let err = setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &n, 4)
                 try handleSetSockOptErr(err, "failed to set rcvbuf \(n) to \(fd)")
                 return
@@ -133,19 +133,19 @@ public class PosixFD: FD {
             let b = value as! Bool
             var n: Int32 = if b { 1 } else { 0 }
             let bname = name as! SocketOption<Bool>
-            if bname == BuiltInSocketOptions.SO_REUSEPORT {
+            if bname == SockOpts.SO_REUSEPORT {
                 let err = setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &n, 4)
                 try handleSetSockOptErr(err, "failed to set reuseport \(b) to \(fd)")
                 return
-            } else if bname == BuiltInSocketOptions.SO_BROADCAST {
+            } else if bname == SockOpts.SO_BROADCAST {
                 let err = setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &n, 4)
                 try handleSetSockOptErr(err, "failed to set broadcast \(b) to \(fd)")
                 return
-            } else if bname == BuiltInSocketOptions.TCP_NODELAY {
+            } else if bname == SockOpts.TCP_NODELAY {
                 let err = setsockopt(fd, SOL_SOCKET, TCP_NODELAY, &n, 4)
                 try handleSetSockOptErr(err, "failed to set tcp nodelay \(b) to \(fd)")
                 return
-            } else if bname == BuiltInSocketOptions.IP_TRANSPARENT {
+            } else if bname == SockOpts.IP_TRANSPARENT {
                 let err = setsockopt(fd, SOL_IP, IP_TRANSPARENT, &n, 4)
                 try handleSetSockOptErr(err, "failed to set ip transparent \(b) to \(fd)")
                 return
@@ -198,10 +198,7 @@ public class PosixFD: FD {
 
     public func close() {
         _ = globalClose(fd)
-    }
-
-    public func real() -> any FD {
-        return self
+        handle_ = nil // release refcnt
     }
 
     public func contains(_ fd: any FD) -> Bool {
@@ -261,8 +258,8 @@ public class InetPosixFD: PosixFD, InetFD {
     private var localAddress_: (any IPPort)? = nil
 
     public var remoteAddress: any IPPort {
-        if remoteAddress_ != nil {
-            return remoteAddress_!
+        if let remoteAddress_ {
+            return remoteAddress_
         }
 
         let (_, addr) = processSockAddr { n, mem in
@@ -276,8 +273,8 @@ public class InetPosixFD: PosixFD, InetFD {
     }
 
     public var localAddress: any IPPort {
-        if localAddress_ != nil {
-            return localAddress_!
+        if let localAddress_ {
+            return localAddress_
         }
 
         let (_, addr) = processSockAddr { n, mem in
@@ -320,11 +317,6 @@ public class StreamPosixFD: InetPosixFD, StreamFD {
             throw IOException("failed to accept fd", errno: errno)
         }
         return formatAcceptedStreamFD(fd: fd)
-    }
-
-    public func finishConnect() throws(IOException) {
-        let buf: [UInt8] = Arrays.newArray(capacity: 1)
-        _ = try write(buf, len: 0)
     }
 
     public func shutdownOutput() {

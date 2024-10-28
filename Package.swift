@@ -33,7 +33,10 @@ let package = Package(
         .target(
             name: "libae",
             path: "submodules/libae-valkey/src",
-            exclude: ["ae_epoll.c", "ae_epoll_poll.c", "ae_evport.c", "ae_kqueue.c", "ae_poll.c", "ae_select.c"]
+            exclude: ["ae_epoll.c", "ae_epoll_poll.c", "ae_evport.c", "ae_kqueue.c", "ae_poll.c", "ae_select.c"],
+            cSettings: [
+                .unsafeFlags(["-Wall", "-Wno-shorten-64-to-32", "-Wno-unused-function"]),
+            ]
         ),
         .target(
             name: "SwiftEventLoopPosixCHelper"),

@@ -16,7 +16,7 @@ public protocol TimeElem<T> {
     func removeSelf()
 }
 
-public class TimeQueueImpl<T>: TimeQueue {
+class TimeQueueImpl<T>: TimeQueue {
     var queue: PriorityQueue<TimeElemImpl<T>> = PriorityQueue(ascending: true)
 
     public func add(currentTimeMillis: UInt64, timeoutMillis: Int, elem: T) -> any TimeElem<T> {
@@ -27,10 +27,10 @@ public class TimeQueueImpl<T>: TimeQueue {
 
     public func poll() -> T? {
         let elem = queue.pop()
-        if elem == nil {
+        guard let elem else {
             return nil
         }
-        return elem!.elem
+        return elem.elem
     }
 
     public func isEmpty() -> Bool {
@@ -39,15 +39,15 @@ public class TimeQueueImpl<T>: TimeQueue {
 
     public func nextTime(currentTimeMillis: UInt64) -> Int {
         let elem = queue.peek()
-        if elem == nil {
+        guard let elem else {
             return Int.max
         }
-        let triggerTime = elem!.triggerTime
+        let triggerTime = elem.triggerTime
         return max(Int(triggerTime - currentTimeMillis), 0)
     }
 }
 
-public class TimeElemImpl<T>: TimeElem, Comparable {
+class TimeElemImpl<T>: TimeElem, Comparable {
     public let triggerTime: UInt64
     public let elem: T
     private let queue: TimeQueueImpl<T>

@@ -1,3 +1,12 @@
+public class SockOpts {
+    public static let SO_RCVBUF: SocketOption<Int> = SocketOption(name: SocketOptionName.SO_RCVBUF)
+    public static let SO_BROADCAST: SocketOption<Bool> = SocketOption(name: SocketOptionName.SO_BROADCAST)
+    public static let SO_LINGER: SocketOption<Int> = SocketOption(name: SocketOptionName.SO_LINGER)
+    public static let SO_REUSEPORT: SocketOption<Bool> = SocketOption(name: SocketOptionName.SO_REUSEPORT)
+    public static let TCP_NODELAY: SocketOption<Bool> = SocketOption(name: SocketOptionName.TCP_NODELAY)
+    public static let IP_TRANSPARENT: SocketOption<Bool> = SocketOption(name: SocketOptionName.IP_TRANSPARENT)
+}
+
 public final class SocketOptionName: CustomStringConvertible, Sendable {
     let name: String
     public init(_ name: String) {
@@ -29,13 +38,4 @@ public struct SocketOption<T>: CustomStringConvertible, Sendable, Equatable {
     public static func == (lhs: SocketOption<T>, rhs: SocketOption<T>) -> Bool {
         return lhs.name === rhs.name
     }
-}
-
-public class BuiltInSocketOptions {
-    public static let SO_RCVBUF: SocketOption<Int> = SocketOption(name: SocketOptionName.SO_RCVBUF)
-    public static let SO_BROADCAST: SocketOption<Bool> = SocketOption(name: SocketOptionName.SO_BROADCAST)
-    public static let SO_LINGER: SocketOption<Int> = SocketOption(name: SocketOptionName.SO_LINGER)
-    public static let SO_REUSEPORT: SocketOption<Bool> = SocketOption(name: SocketOptionName.SO_REUSEPORT)
-    public static let TCP_NODELAY: SocketOption<Bool> = SocketOption(name: SocketOptionName.TCP_NODELAY)
-    public static let IP_TRANSPARENT: SocketOption<Bool> = SocketOption(name: SocketOptionName.IP_TRANSPARENT)
 }

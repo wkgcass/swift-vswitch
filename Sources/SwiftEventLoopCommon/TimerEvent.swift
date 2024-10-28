@@ -20,9 +20,9 @@ public class TimerEvent {
             return
         }
         canceled = true
-        if event == nil {
+        guard let event else {
             return
         }
-        eventLoop.nextTick(Runnable { self.event!.removeSelf() })
+        eventLoop.nextTick { event.removeSelf() }
     }
 }
