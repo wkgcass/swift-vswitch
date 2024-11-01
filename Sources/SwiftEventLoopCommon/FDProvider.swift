@@ -20,7 +20,7 @@ public class FDProvider {
     }
 }
 
-public protocol FDs {
+public protocol FDs: AnyObject {
     func newThread(_ runnable: @escaping () -> Void) -> any Thread
     func currentThread() -> (any Thread)?
 
@@ -49,7 +49,7 @@ public struct SelectorOptions: Sendable {
     public init() {}
 }
 
-public protocol Thread {
+public protocol Thread: AnyObject {
     func start()
     func join()
 

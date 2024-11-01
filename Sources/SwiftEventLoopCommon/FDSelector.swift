@@ -1,6 +1,6 @@
 import VProxyCommon
 
-public protocol FDSelector {
+public protocol FDSelector: AnyObject {
     func isOpen() -> Bool
     func select(_ entries: inout [SelectedEntry]) throws(IOException) -> Int
     func selectNow(_ entries: inout [SelectedEntry]) throws(IOException) -> Int

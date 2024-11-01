@@ -1,6 +1,6 @@
 import SwiftPriorityQueue
 
-public protocol TimeQueue<T> {
+public protocol TimeQueue<T>: AnyObject {
     associatedtype T
 
     func add(currentTimeMillis: UInt64, timeoutMillis: Int, elem: T) -> any TimeElem<T>
@@ -9,7 +9,7 @@ public protocol TimeQueue<T> {
     func nextTime(currentTimeMillis: UInt64) -> Int
 }
 
-public protocol TimeElem<T> {
+public protocol TimeElem<T>: AnyObject {
     associatedtype T
 
     func get() -> T

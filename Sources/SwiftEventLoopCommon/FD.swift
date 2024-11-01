@@ -1,6 +1,6 @@
 import VProxyCommon
 
-public protocol FD<HandleType>: Equatable, Hashable {
+public protocol FD<HandleType>: Equatable, Hashable, AnyObject {
     associatedtype HandleType: FDHandle
 
     func isOpen() -> Bool
