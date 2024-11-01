@@ -8,7 +8,7 @@ class TestTimer {
         PosixFDs.setup()
     }
 
-    @Test func testDelay() throws {
+    @Test func delay() throws {
         let loop = try SelectorEventLoop.open()
         let thread = FDProvider.get().newThread { loop.loop() }
         thread.start()
@@ -21,7 +21,7 @@ class TestTimer {
         #expect(after - begin >= 1000)
     }
 
-    @Test func testCancelDelay() throws {
+    @Test func cancelDelay() throws {
         let loop = try SelectorEventLoop.open()
         let thread = FDProvider.get().newThread { loop.loop() }
         thread.start()
@@ -38,7 +38,7 @@ class TestTimer {
         #expect(after - begin >= 1000)
     }
 
-    @Test func testPeriodic() throws {
+    @Test func periodic() throws {
         let loop = try SelectorEventLoop.open()
         let thread = FDProvider.get().newThread { loop.loop() }
         thread.start()
@@ -58,7 +58,7 @@ class TestTimer {
         #expect(after - begin > 500 && after - begin < 600)
     }
 
-    @Test func testCancelPeriodic() throws {
+    @Test func cancelPeriodic() throws {
         let loop = try SelectorEventLoop.open()
         let thread = FDProvider.get().newThread { loop.loop() }
         thread.start()

@@ -13,7 +13,7 @@ struct TestUDP {
         PosixFDs.setup()
     }
 
-    @Test func testUdp() throws {
+    @Test func udp() throws {
         let selector = try FDProvider.get().openSelector()
 
         let listenUdp = try FDProvider.get().openIPv6Udp()

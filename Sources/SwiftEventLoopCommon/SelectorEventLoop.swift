@@ -104,6 +104,7 @@ public class SelectorEventLoop {
                 let readyOps = key.ready
                 // handle read first because it's most likely to happen
                 if readyOps.have(Event.READABLE) {
+                    assert(Logger.lowLevelDebug("firing readable for \(fd)"))
                     do {
                         try handler.readable(ctx)
                     } catch {
@@ -285,6 +286,9 @@ public class SelectorEventLoop {
     }
 
     public func add(_ fd: any FD, ops: EventSet, attachment: Any?, _ handler: Handler) throws(IOException) {
+        if !fd.isOpen() {
+            throw IOException("fd \(fd) is not open")
+        }
         if !fd.loopAware(self) {
             throw IOException("fd \(fd) rejects to be attached to current event loop")
         }

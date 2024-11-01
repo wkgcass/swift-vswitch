@@ -92,7 +92,9 @@ class AESelector: FDSelector {
                 clearPipeFD()
                 continue
             }
-            let fd = fds[Int(fired.fd)]!
+            guard let fd = fds[Int(fired.fd)] else { // possible concurrent removal
+                continue
+            }
             var ops = EventSet.none()
             if fired.mask & AE_READABLE != 0 {
                 ops = ops.combine(EventSet.read())

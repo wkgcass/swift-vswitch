@@ -13,7 +13,7 @@ struct TestSelectorEventLoop {
         PosixFDs.setup()
     }
 
-    @Test func testSelectorEventLoop() throws {
+    @Test func selectorEventLoop() throws {
         let loop = try SelectorEventLoop.open()
         loop.loop { r in FDProvider.get().newThread(r) }
         var loopOnLoop: SelectorEventLoop?
@@ -27,7 +27,7 @@ struct TestSelectorEventLoop {
         #expect(loop === loopOnLoop)
     }
 
-    @Test func testSelect() throws {
+    @Test func select() throws {
         let loop = try SelectorEventLoop.open()
         let thread = FDProvider.get().newThread {
             loop.loop()

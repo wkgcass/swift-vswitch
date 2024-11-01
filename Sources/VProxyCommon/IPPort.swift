@@ -29,7 +29,7 @@ public func GetIPPort(from: String) -> IPPort? {
 }
 
 public protocol IPPort: CustomStringConvertible {
-    var ip: IP { get }
+    var ip: any IP { get }
     var port: UInt16 { get }
 }
 
@@ -51,7 +51,7 @@ public extension IPPort {
         }
         let port = Convert.reverseByteOrder(port)
         ret.sin6_port = port
-        memcpy(&ret.sin6_addr, ip.bytes, ip.bytes.capacity)
+        ip.copyInto(&ret.sin6_addr)
         if ip is IPv6 {
             return (socklen_t(MemoryLayout<sockaddr_in6>.stride), ret)
         } else {
@@ -62,7 +62,7 @@ public extension IPPort {
 
 public struct IPv4Port: IPPort {
     private let ip_: IPv4
-    public var ip: IP { ip_ }
+    public var ip: any IP { ip_ }
     public let port: UInt16
     public init(_ ip: IPv4, _ port: UInt16) {
         ip_ = ip
@@ -81,14 +81,14 @@ public struct IPv4Port: IPPort {
         ret.sin_family = sa_family_t(AF_INET)
         let port = Convert.reverseByteOrder(port)
         ret.sin_port = port
-        memcpy(&ret.sin_addr, ip_.bytes, 4)
+        ip_.copyInto(&ret.sin_addr)
         return ret
     }
 }
 
 public struct IPv6Port: IPPort {
     private let ip_: IPv6
-    public var ip: IP { ip_ }
+    public var ip: any IP { ip_ }
     public let port: UInt16
     public init(_ ip: IPv6, _ port: UInt16) {
         ip_ = ip
@@ -107,7 +107,7 @@ public struct IPv6Port: IPPort {
         ret.sin6_family = sa_family_t(AF_INET6)
         let port = Convert.reverseByteOrder(port)
         ret.sin6_port = port
-        memcpy(&ret.sin6_addr, ip_.bytes, 16)
+        ip_.copyInto(&ret.sin6_addr)
         return ret
     }
 }

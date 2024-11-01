@@ -13,7 +13,7 @@ struct TestTCP {
         PosixFDs.setup()
     }
 
-    @Test func testTcp() throws {
+    @Test func tcp() throws {
         let selector = try FDProvider.get().openSelector()
 
         let serverFD = try FDProvider.get().openIPv4Tcp()

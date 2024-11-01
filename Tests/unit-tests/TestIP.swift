@@ -2,21 +2,21 @@ import Testing
 import VProxyCommon
 
 struct TestIP {
-    @Test func testIPv4() {
+    @Test func ipv4() {
         let ip = GetIP(from: "192.168.1.2")
         #expect(ip != nil)
         if let v4 = ip! as? IPv4 {
-            #expect(v4.bytes[0] == 192)
-            #expect(v4.bytes[1] == 168)
-            #expect(v4.bytes[2] == 1)
-            #expect(v4.bytes[3] == 2)
+            #expect(v4.bytes.0 == 192)
+            #expect(v4.bytes.1 == 168)
+            #expect(v4.bytes.2 == 1)
+            #expect(v4.bytes.3 == 2)
             #expect(v4.description == "192.168.1.2")
         } else {
             Issue.record("192.168.1.2 should be ipv4")
         }
     }
 
-    @Test func testIPv6() {
+    @Test func ipv6() {
         let ip = GetIP(from: "2001:0:130F::9C0:876A:130B")
         #expect(ip != nil)
         if let v6 = ip! as? IPv6 {
@@ -26,7 +26,7 @@ struct TestIP {
         }
     }
 
-    @Test func testIPv4Port() {
+    @Test func ipv4Port() {
         let ipport = GetIPPort(from: "192.168.1.2:8080")
         #expect(ipport != nil)
         if let ipv4port = ipport! as? IPv4Port {
@@ -36,7 +36,7 @@ struct TestIP {
         }
     }
 
-    @Test func testIPv6Port() {
+    @Test func ipv6Port() {
         let ipport = GetIPPort(from: "2001:0:130F::9C0:876A:130B:8080")
         #expect(ipport != nil)
         if let ipv6port = ipport! as? IPv6Port {
@@ -44,5 +44,39 @@ struct TestIP {
         } else {
             Issue.record("[2001:0:130f::9c0:876a:130b]:8080 should be ipv6:port")
         }
+    }
+
+    @Test func structLen() {
+        #expect(MemoryLayout<IPv4>.size == 4)
+        #expect(MemoryLayout<IPv4>.stride == 4)
+        #expect(MemoryLayout<IPv4>.alignment == 1)
+
+        #expect(MemoryLayout<IPv6>.size == 16)
+        #expect(MemoryLayout<IPv6>.stride == 16)
+        #expect(MemoryLayout<IPv6>.alignment == 1)
+    }
+
+    @Test func equal() {
+        let ip41 = IPv4("1.2.3.4")!
+        let ip42 = IPv4("1.2.3.4")!
+        #expect(ip41 == ip42)
+        let ip43 = IPv4("2.2.3.4")!
+        #expect(ip41 != ip43)
+
+        let ip61 = IPv6("fd00::1")!
+        let ip62 = IPv6("fd00::1")!
+        #expect(ip61 == ip62)
+        let ip63 = IPv6("fd00::2")!
+        #expect(ip61 != ip63)
+    }
+
+    @Test func hashable() {
+        var m1 = [IPv4: Int]()
+        m1[IPv4("1.2.3.4")!] = 1
+        #expect(m1[IPv4("1.2.3.4")!] == 1)
+
+        var m2 = [IPv6: Int]()
+        m2[IPv6("fd00::1")!] = 1
+        #expect(m2[IPv6("fd00::1")!] == 1)
     }
 }

@@ -91,7 +91,7 @@ let globalBind = bind
 let IP_TRANSPARENT: Int32 = 19
 let SOL_IP: Int32 = 0
 
-public class PosixFD: FD {
+public class PosixFD: FD, CustomStringConvertible {
     public typealias HandleType = FDHandle
 
     let fd: Int32
@@ -136,6 +136,10 @@ public class PosixFD: FD {
             if bname == SockOpts.SO_REUSEPORT {
                 let err = setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &n, 4)
                 try handleSetSockOptErr(err, "failed to set reuseport \(b) to \(fd)")
+                return
+            } else if bname == SockOpts.SO_REUSEADDR {
+                let err = setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &n, 4)
+                try handleSetSockOptErr(err, "failed to set reuseaddr \(b) to \(fd)")
                 return
             } else if bname == SockOpts.SO_BROADCAST {
                 let err = setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &n, 4)
@@ -212,6 +216,10 @@ public class PosixFD: FD {
         return handle_!
     }
 
+    public var description: String {
+        return "PosixFD(\(fd))"
+    }
+
     public static func == (lhs: PosixFD, rhs: PosixFD) -> Bool {
         return lhs === rhs
     }
@@ -262,14 +270,20 @@ public class InetPosixFD: PosixFD, InetFD {
             return remoteAddress_
         }
 
-        let (_, addr) = processSockAddr { n, mem in
-            let err = getpeername(fd, mem, &n)
-            if err < 0 {
-                Logger.error(.SOCKET_ERROR, "failed to get remote address from \(fd)")
-            }
+        let res: any IPPort
+        if af == AF_INET {
+            var addr = sockaddr_in()
+            var len = UInt32(MemoryLayout<sockaddr_in>.stride)
+            getpeername(fd, Convert.mut2mutUnsafe(&addr), &len)
+            res = IPv4Port(IPv4(&addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
+        } else {
+            var addr = sockaddr_in6()
+            var len = UInt32(MemoryLayout<sockaddr_in6>.stride)
+            getpeername(fd, Convert.mut2mutUnsafe(&addr), &len)
+            res = IPv6Port(IPv6(&addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
         }
-        remoteAddress_ = addr
-        return addr
+        localAddress_ = res
+        return res
     }
 
     public var localAddress: any IPPort {
@@ -277,28 +291,20 @@ public class InetPosixFD: PosixFD, InetFD {
             return localAddress_
         }
 
-        let (_, addr) = processSockAddr { n, mem in
-            let err = getsockname(fd, mem, &n)
-            if err < 0 {
-                Logger.error(.SOCKET_ERROR, "failed to get local address from \(fd)")
-            }
-        }
-        localAddress_ = addr
-        return addr
-    }
-
-    func processSockAddr<T>(_ f: (inout socklen_t, UnsafeMutablePointer<sockaddr>) -> T) -> (T, IPPort) {
+        let res: any IPPort
         if af == AF_INET {
-            var x = sockaddr_in()
-            var n = socklen_t(MemoryLayout<sockaddr_in>.stride)
-            let t = f(&n, Convert.mut2mutUnsafe(&x))
-            return (t, IPv4Port(x))
+            var addr = sockaddr_in()
+            var len = UInt32(MemoryLayout<sockaddr_in>.stride)
+            getsockname(fd, Convert.mut2mutUnsafe(&addr), &len)
+            res = IPv4Port(IPv4(&addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
         } else {
-            var x = sockaddr_in6()
-            var n = socklen_t(MemoryLayout<sockaddr_in6>.stride)
-            let t = f(&n, Convert.mut2mutUnsafe(&x))
-            return (t, IPv6Port(x))
+            var addr = sockaddr_in6()
+            var len = UInt32(MemoryLayout<sockaddr_in6>.stride)
+            getsockname(fd, Convert.mut2mutUnsafe(&addr), &len)
+            res = IPv6Port(IPv6(&addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
         }
+        localAddress_ = res
+        return res
     }
 }
 
@@ -331,8 +337,18 @@ public class DatagramPosixFD: InetPosixFD, DatagramFD {
 
     public func recv(_ buf: [UInt8], off: Int, len: Int) throws(IOException) -> (Int, IPPort?) {
         var errno: Int32 = 0
-        let (n, addr) = processSockAddr { n, mem in
-            recvfromWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, 0, mem, &n, &errno)
+        let n: Int
+        let res: any IPPort
+        if af == AF_INET {
+            var addr = sockaddr_in()
+            var sz = UInt32(MemoryLayout<sockaddr_in6>.stride)
+            n = recvfromWithErrno(fd,  Arrays.getRaw(from: buf, offset: off), len, 0, Convert.mut2mutUnsafe(&addr), &sz, &errno)
+            res = IPv4Port(IPv4(&addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
+        } else {
+            var addr = sockaddr_in6()
+            var sz = UInt32(MemoryLayout<sockaddr_in6>.stride)
+            n = recvfromWithErrno(fd,  Arrays.getRaw(from: buf, offset: off), len, 0, Convert.mut2mutUnsafe(&addr), &sz, &errno)
+            res = IPv6Port(IPv6(&addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
         }
         if n < 0 {
             if errno == EWOULDBLOCK {
@@ -340,7 +356,7 @@ public class DatagramPosixFD: InetPosixFD, DatagramFD {
             }
             throw IOException("failed to recv", errno: errno)
         }
-        return (n, addr)
+        return (n, res)
     }
 
     public func send(_ buf: [UInt8], len: Int, remote: any IPPort) throws(IOException) -> Int {

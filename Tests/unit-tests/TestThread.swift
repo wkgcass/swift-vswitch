@@ -8,7 +8,7 @@ struct TestThread {
         PosixFDs.setup()
     }
 
-    @Test func testNewThreadAndJoin() {
+    @Test func newThreadAndJoin() {
         var variable = 1
         let thread = FDProvider.get().newThread {
             variable = 2
@@ -18,7 +18,7 @@ struct TestThread {
         #expect(variable == 2)
     }
 
-    @Test func testNewThreadSleep() {
+    @Test func newThreadSleep() {
         let startTime = OS.currentTimeMillis()
         let thread = FDProvider.get().newThread {
             OS.sleep(millis: 1000)
@@ -29,7 +29,7 @@ struct TestThread {
         #expect(endTime - startTime > 1000)
     }
 
-    @Test func testThreadLocal() {
+    @Test func threadLocal() {
         var threadObjFromThread: (any SwiftEventLoopCommon.Thread)?
         let thread = FDProvider.get().newThread {
             threadObjFromThread = FDProvider.get().currentThread()

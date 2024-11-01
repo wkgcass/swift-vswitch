@@ -12,6 +12,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/davecom/SwiftPriorityQueue.git", revision: "1.4.0"),
         .package(url: "https://github.com/apple/swift-collections.git", revision: "1.1.4"),
+        .package(url: "https://github.com/apple/swift-argument-parser", revision: "1.5.0"),
     ],
     targets: [
         .target(
@@ -50,7 +51,11 @@ let package = Package(
         ),
         .executableTarget(
             name: "Sample_EventLoop",
-            dependencies: ["SwiftEventLoopPosix", "SwiftPriorityQueue"]
+            dependencies: [
+                "SwiftEventLoopPosix",
+                "SwiftPriorityQueue",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]
         ),
         .testTarget(
             name: "unit-tests",
