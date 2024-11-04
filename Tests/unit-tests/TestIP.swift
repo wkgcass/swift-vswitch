@@ -57,26 +57,31 @@ struct TestIP {
     }
 
     @Test func equal() {
-        let ip41 = IPv4("1.2.3.4")!
-        let ip42 = IPv4("1.2.3.4")!
+        let ip41 = IPv4(from: "1.2.3.4")!
+        let ip42 = IPv4(from: "1.2.3.4")!
         #expect(ip41 == ip42)
-        let ip43 = IPv4("2.2.3.4")!
+        let ip43 = IPv4(from: "2.2.3.4")!
         #expect(ip41 != ip43)
 
-        let ip61 = IPv6("fd00::1")!
-        let ip62 = IPv6("fd00::1")!
+        let ip61 = IPv6(from: "fd00::1")!
+        let ip62 = IPv6(from: "fd00::1")!
         #expect(ip61 == ip62)
-        let ip63 = IPv6("fd00::2")!
+        let ip63 = IPv6(from: "fd00::2")!
         #expect(ip61 != ip63)
     }
 
     @Test func hashable() {
         var m1 = [IPv4: Int]()
-        m1[IPv4("1.2.3.4")!] = 1
-        #expect(m1[IPv4("1.2.3.4")!] == 1)
+        m1[IPv4(from: "1.2.3.4")!] = 1
+        #expect(m1[IPv4(from: "1.2.3.4")!] == 1)
 
         var m2 = [IPv6: Int]()
-        m2[IPv6("fd00::1")!] = 1
-        #expect(m2[IPv6("fd00::1")!] == 1)
+        m2[IPv6(from: "fd00::1")!] = 1
+        #expect(m2[IPv6(from: "fd00::1")!] == 1)
+    }
+
+    @Test func network() {
+        let linkLocal = NetworkV6(from: "fe80::/10")!
+        #expect(linkLocal.contains(GetIP(from: "fe80::1074:aeff:fea3:eaa2")))
     }
 }

@@ -1,0 +1,4 @@
+module SwiftVSwitchTunTapCHelper {
+    header "../c_helper.h"
+    export *
+}

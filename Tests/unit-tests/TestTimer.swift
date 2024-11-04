@@ -45,7 +45,7 @@ class TestTimer {
 
         let begin = OS.currentTimeMillis()
         var n = 0
-        _ = loop.period(intervalMillis: 100) {
+        _ = loop.period(intervalMillis: 200) {
             n += 1
             if n >= 5 {
                 loop.close()
@@ -55,7 +55,7 @@ class TestTimer {
         thread.join()
         let after = OS.currentTimeMillis()
 
-        #expect(after - begin > 500 && after - begin < 600)
+        #expect(after - begin > 1000 && after - begin < 1200)
     }
 
     @Test func cancelPeriodic() throws {

@@ -12,7 +12,7 @@ public struct IOException: Error {
     }
 
     public init(_ msg: String, errno: Int32) {
-        let m = msg + ": \(errno)\(String(cString: strerror(errno)))"
+        let m = msg + ": \(errno) \(String(cString: strerror(errno)))"
         self.init(m)
     }
 }

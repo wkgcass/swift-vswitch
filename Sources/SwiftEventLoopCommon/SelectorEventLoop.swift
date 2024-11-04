@@ -7,6 +7,7 @@ public class SelectorEventLoop {
     private let initOptions: SelectorOptions
     private let timeQueue: any TimeQueue<Runnable> = TimeQueueImpl()
     private let runOnLoopEvents: ConcurrentQueue<Runnable> = ConcurrentQueue()
+    private var forEachLoopEvents = [ForEachPollEvent]()
 
     private var runningThread: (any Thread)?
 
@@ -61,6 +62,7 @@ public class SelectorEventLoop {
     private func handleNonSelectEvents() {
         handleRunOnLoopEvents()
         handleTimeEvents()
+        handleForEachLoopEvents()
     }
 
     private func handleRunOnLoopEvents() {
@@ -83,6 +85,16 @@ public class SelectorEventLoop {
         }
         for r in toRun {
             tryRunnable(r)
+        }
+    }
+
+    private func handleForEachLoopEvents() {
+        for (idx, e) in forEachLoopEvents.reversed().enumerated() {
+            if !e.valid {
+                forEachLoopEvents.remove(at: idx)
+                continue
+            }
+            tryRunnable(e.r)
         }
     }
 
@@ -267,6 +279,10 @@ public class SelectorEventLoop {
         } else {
             nextTick(r) // otherwise push into queue
         }
+    }
+
+    public func forEachLoop(_ e: ForEachPollEvent) {
+        runOnLoop { self.forEachLoopEvents.append(e) }
     }
 
     public func delay(millis: Int, _ r: @escaping Runnable) -> TimerEvent {
@@ -464,5 +480,13 @@ class RegisterData {
     init(handler: any Handler, att: Any?) {
         self.handler = handler
         self.att = att
+    }
+}
+
+public class ForEachPollEvent {
+    public var valid = true
+    public let r: Runnable
+    public init(r: @escaping Runnable) {
+        self.r = r
     }
 }

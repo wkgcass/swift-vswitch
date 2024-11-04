@@ -23,6 +23,10 @@ public class Logger {
         print(msg)
     }
 
+    public static func trace(_: LogType, _ msg: String) {
+        print(msg)
+    }
+
     public static func alert(_ msg: String) {
         info(.ALERT, msg)
     }

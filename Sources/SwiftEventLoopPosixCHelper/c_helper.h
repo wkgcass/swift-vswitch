@@ -1,6 +1,3 @@
-#ifndef _C_HELPER_
-#define _C_HELPER_
-
 #define _GNU_SOURCE
 
 #include <unistd.h>
@@ -25,5 +22,3 @@ void swvs_start_thread(swvs_thread_t* thread, swvs_pthread_runnable runnable, vo
 #ifdef __linux__
 int swvs_set_core_affinity(int64_t mask, int* err);
 #endif
-
-#endif // _C_HELPER_

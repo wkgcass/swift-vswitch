@@ -91,14 +91,14 @@ let globalBind = bind
 let IP_TRANSPARENT: Int32 = 19
 let SOL_IP: Int32 = 0
 
-public class PosixFD: FD, CustomStringConvertible {
+open class PosixFD: FD, CustomStringConvertible {
     public typealias HandleType = FDHandle
 
     let fd: Int32
     private var isOpen_: Bool
     private var handle_: FDHandle? = nil
 
-    init(fd: Int32) {
+    public init(fd: Int32) {
         self.fd = fd
         isOpen_ = true
     }
@@ -170,8 +170,12 @@ public class PosixFD: FD, CustomStringConvertible {
     }
 
     public func write(_ buf: [UInt8], off: Int, len: Int) throws(IOException) -> Int {
+        return try write(Arrays.getRaw(from: buf), off: off, len: len)
+    }
+
+    public func write(_ buf: UnsafePointer<UInt8>, off: Int, len: Int) throws(IOException) -> Int {
         var errno: Int32 = 0
-        let n = writeWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, &errno)
+        let n = writeWithErrno(fd, buf.advanced(by: off), len, &errno)
         if n < 0 {
             if errno == EWOULDBLOCK {
                 return 0
@@ -181,11 +185,11 @@ public class PosixFD: FD, CustomStringConvertible {
         return n
     }
 
-    public func read(_ buf: [UInt8], len: Int) throws(IOException) -> Int {
-        return try read(buf, off: 0, len: len)
+    public func read(_ buf: inout [UInt8], len: Int) throws(IOException) -> Int {
+        return try read(&buf, off: 0, len: len)
     }
 
-    public func read(_ buf: [UInt8], off: Int = 0, len: Int) throws(IOException) -> Int {
+    public func read(_ buf: inout [UInt8], off: Int = 0, len: Int) throws(IOException) -> Int {
         var errno: Int32 = 0
         let n = readWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, &errno)
         if n < 0 {
@@ -275,12 +279,12 @@ public class InetPosixFD: PosixFD, InetFD {
             var addr = sockaddr_in()
             var len = UInt32(MemoryLayout<sockaddr_in>.stride)
             getpeername(fd, Convert.mut2mutUnsafe(&addr), &len)
-            res = IPv4Port(IPv4(&addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
+            res = IPv4Port(IPv4(raw: &addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
         } else {
             var addr = sockaddr_in6()
             var len = UInt32(MemoryLayout<sockaddr_in6>.stride)
             getpeername(fd, Convert.mut2mutUnsafe(&addr), &len)
-            res = IPv6Port(IPv6(&addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
+            res = IPv6Port(IPv6(raw: &addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
         }
         localAddress_ = res
         return res
@@ -296,12 +300,12 @@ public class InetPosixFD: PosixFD, InetFD {
             var addr = sockaddr_in()
             var len = UInt32(MemoryLayout<sockaddr_in>.stride)
             getsockname(fd, Convert.mut2mutUnsafe(&addr), &len)
-            res = IPv4Port(IPv4(&addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
+            res = IPv4Port(IPv4(raw: &addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
         } else {
             var addr = sockaddr_in6()
             var len = UInt32(MemoryLayout<sockaddr_in6>.stride)
             getsockname(fd, Convert.mut2mutUnsafe(&addr), &len)
-            res = IPv6Port(IPv6(&addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
+            res = IPv6Port(IPv6(raw: &addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
         }
         localAddress_ = res
         return res
@@ -331,24 +335,24 @@ public class StreamPosixFD: InetPosixFD, StreamFD {
 }
 
 public class DatagramPosixFD: InetPosixFD, DatagramFD {
-    public func recv(_ buf: [UInt8], len: Int) throws(IOException) -> (Int, IPPort?) {
-        return try recv(buf, off: 0, len: len)
+    public func recv(_ buf: inout [UInt8], len: Int) throws(IOException) -> (Int, IPPort?) {
+        return try recv(&buf, off: 0, len: len)
     }
 
-    public func recv(_ buf: [UInt8], off: Int, len: Int) throws(IOException) -> (Int, IPPort?) {
+    public func recv(_ buf: inout [UInt8], off: Int, len: Int) throws(IOException) -> (Int, IPPort?) {
         var errno: Int32 = 0
         let n: Int
         let res: any IPPort
         if af == AF_INET {
             var addr = sockaddr_in()
             var sz = UInt32(MemoryLayout<sockaddr_in6>.stride)
-            n = recvfromWithErrno(fd,  Arrays.getRaw(from: buf, offset: off), len, 0, Convert.mut2mutUnsafe(&addr), &sz, &errno)
-            res = IPv4Port(IPv4(&addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
+            n = recvfromWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, 0, Convert.mut2mutUnsafe(&addr), &sz, &errno)
+            res = IPv4Port(IPv4(raw: &addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
         } else {
             var addr = sockaddr_in6()
             var sz = UInt32(MemoryLayout<sockaddr_in6>.stride)
-            n = recvfromWithErrno(fd,  Arrays.getRaw(from: buf, offset: off), len, 0, Convert.mut2mutUnsafe(&addr), &sz, &errno)
-            res = IPv6Port(IPv6(&addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
+            n = recvfromWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, 0, Convert.mut2mutUnsafe(&addr), &sz, &errno)
+            res = IPv6Port(IPv6(raw: &addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
         }
         if n < 0 {
             if errno == EWOULDBLOCK {

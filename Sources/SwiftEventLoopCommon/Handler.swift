@@ -52,3 +52,10 @@ public struct HandlerContext: ~Copyable {
         return eventLoop.getOps(fd)
     }
 }
+
+public class DoNothingHandler: Handler {
+    public init() {}
+    public func readable(_: borrowing HandlerContext) throws {}
+    public func writable(_: borrowing HandlerContext) throws {}
+    public func removed(_: borrowing HandlerContext) throws {}
+}

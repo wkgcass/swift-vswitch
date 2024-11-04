@@ -9,11 +9,11 @@ public protocol IP: CustomStringConvertible, Equatable, Hashable {
 }
 
 public func GetIP(from ip: String) -> (any IP)? {
-    let v4 = IPv4(ip)
+    let v4 = IPv4(from: ip)
     if v4 != nil {
         return v4
     }
-    let v6 = IPv6(ip)
+    let v6 = IPv6(from: ip)
     if v6 != nil {
         return v6
     }
@@ -22,9 +22,9 @@ public func GetIP(from ip: String) -> (any IP)? {
 
 public func GetIP(from bytes: [UInt8]) -> (any IP)? {
     if bytes.capacity == 4 {
-        return IPv4(bytes)
+        return IPv4(raw: bytes)
     } else if bytes.capacity == 16 {
-        return IPv6(bytes)
+        return IPv6(raw: bytes)
     } else {
         return nil
     }
@@ -33,7 +33,7 @@ public func GetIP(from bytes: [UInt8]) -> (any IP)? {
 public struct IPv4: IP {
     public let bytes: (UInt8, UInt8, UInt8, UInt8)
 
-    public init?(_ ip: String) {
+    public init?(from ip: String) {
         var tmp = in_addr()
         let err = inet_pton(AF_INET, ip, &tmp)
         if err == 0 {
@@ -47,7 +47,7 @@ public struct IPv4: IP {
         return (u8p.pointee, u8p.advanced(by: 1).pointee, u8p.advanced(by: 2).pointee, u8p.advanced(by: 3).pointee)
     }
 
-    public init(_ bytes: UnsafeRawPointer) {
+    public init(raw bytes: UnsafeRawPointer) {
         let u8p: UnsafePointer<UInt8> = Convert.raw2ptr(bytes)
         self.bytes = (u8p.pointee, u8p.advanced(by: 1).pointee,
                       u8p.advanced(by: 2).pointee, u8p.advanced(by: 3).pointee)
@@ -83,7 +83,7 @@ public struct IPv6: IP {
                        UInt8, UInt8, UInt8, UInt8,
                        UInt8, UInt8, UInt8, UInt8)
 
-    public init?(_ ip_: String) {
+    public init?(from ip_: String) {
         var ip = ip_
         let l = ip.firstIndex(of: "[")
         if l != nil {
@@ -114,13 +114,14 @@ public struct IPv6: IP {
                 u8p.advanced(by: 12).pointee, u8p.advanced(by: 13).pointee, u8p.advanced(by: 14).pointee, u8p.advanced(by: 15).pointee)
     }
 
-    public init(_ bytes: UnsafeRawPointer) {
+    public init(raw bytes: UnsafeRawPointer) {
         let u8p: UnsafePointer<UInt8> = Convert.raw2ptr(bytes)
         self.bytes = (
             u8p.pointee, u8p.advanced(by: 1).pointee, u8p.advanced(by: 2).pointee, u8p.advanced(by: 3).pointee,
             u8p.advanced(by: 4).pointee, u8p.advanced(by: 5).pointee, u8p.advanced(by: 6).pointee, u8p.advanced(by: 7).pointee,
             u8p.advanced(by: 8).pointee, u8p.advanced(by: 9).pointee, u8p.advanced(by: 10).pointee, u8p.advanced(by: 11).pointee,
-            u8p.advanced(by: 12).pointee, u8p.advanced(by: 13).pointee, u8p.advanced(by: 14).pointee, u8p.advanced(by: 15).pointee)
+            u8p.advanced(by: 12).pointee, u8p.advanced(by: 13).pointee, u8p.advanced(by: 14).pointee, u8p.advanced(by: 15).pointee
+        )
     }
 
     public func copyInto(_ p: UnsafeMutableRawPointer) {

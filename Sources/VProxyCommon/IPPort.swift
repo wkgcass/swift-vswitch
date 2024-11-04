@@ -73,7 +73,7 @@ public struct IPv4Port: IPPort {
         var xaddr = addr
         var bytes: [UInt8] = Arrays.newArray(capacity: 4, uninitialized: true)
         memcpy(&bytes, &xaddr.sin_addr.s_addr, 4)
-        self.init(IPv4(bytes), Convert.reverseByteOrder(xaddr.sin_port))
+        self.init(IPv4(raw: bytes), Convert.reverseByteOrder(xaddr.sin_port))
     }
 
     public func toSockAddr() -> sockaddr_in {
@@ -99,7 +99,7 @@ public struct IPv6Port: IPPort {
         var xaddr = addr
         var bytes: [UInt8] = Arrays.newArray(capacity: 16, uninitialized: true)
         memcpy(&bytes, &xaddr.sin6_addr, 16)
-        self.init(IPv6(bytes), Convert.reverseByteOrder(xaddr.sin6_port))
+        self.init(IPv6(raw: bytes), Convert.reverseByteOrder(xaddr.sin6_port))
     }
 
     public func toSockAddr() -> sockaddr_in6 {

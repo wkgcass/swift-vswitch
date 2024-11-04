@@ -13,8 +13,8 @@ public protocol FD<HandleType>: Equatable, Hashable, AnyObject {
 
     func write(_ buf: [UInt8], len: Int) throws(IOException) -> Int
     func write(_ buf: [UInt8], off: Int, len: Int) throws(IOException) -> Int
-    func read(_ buf: [UInt8], len: Int) throws(IOException) -> Int
-    func read(_ buf: [UInt8], off: Int, len: Int) throws(IOException) -> Int
+    func read(_ buf: inout [UInt8], len: Int) throws(IOException) -> Int
+    func read(_ buf: inout [UInt8], off: Int, len: Int) throws(IOException) -> Int
 }
 
 public extension FD {
@@ -50,8 +50,8 @@ public extension StreamFD {
 public protocol TcpFD: StreamFD {}
 
 public protocol DatagramFD: InetFD {
-    func recv(_ buf: [UInt8], len: Int) throws(IOException) -> (Int, IPPort?)
-    func recv(_ buf: [UInt8], off: Int, len: Int) throws(IOException) -> (Int, IPPort?)
+    func recv(_ buf: inout [UInt8], len: Int) throws(IOException) -> (Int, IPPort?)
+    func recv(_ buf: inout [UInt8], off: Int, len: Int) throws(IOException) -> (Int, IPPort?)
     func send(_ buf: [UInt8], len: Int, remote: IPPort) throws(IOException) -> Int
     func send(_ buf: [UInt8], off: Int, len: Int, remote: IPPort) throws(IOException) -> Int
 }

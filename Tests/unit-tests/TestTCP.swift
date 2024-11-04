@@ -69,7 +69,7 @@ struct TestTCP {
                     }
                 }
                 if fire.ready.have(.READABLE) {
-                    var len = try fire.fd.read(buf, len: buf.capacity)
+                    var len = try fire.fd.read(&buf, len: buf.capacity)
                     if len > 0 {
                         var cchars: [CChar] = Arrays.newArray(capacity: len + 1, uninitialized: true)
                         memcpy(&cchars, buf, len)

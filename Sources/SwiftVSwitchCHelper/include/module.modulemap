@@ -1,0 +1,4 @@
+module SwiftVSwitchCHelper {
+    header "../c_helper.h"
+    export *
+}

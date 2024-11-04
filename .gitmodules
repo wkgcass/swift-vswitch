@@ -2,3 +2,8 @@
 	path = submodules/libae-valkey
 	url = https://github.com/vproxy-tools/libae-valkey
 	branch = vproxy
+
+[submodule "submodules/vproxy-checksum"]
+	path = submodules/vproxy-checksum
+	url = https://github.com/vproxy-tools/checksum
+	branch = master

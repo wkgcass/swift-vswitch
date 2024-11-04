@@ -88,7 +88,7 @@ class AcceptHandler: TcpHandler {
         }
     }
 
-    public func writable(_ ctx: borrowing HandlerContext) throws {
+    public func writable(_: borrowing HandlerContext) throws {
         // will never fire
     }
 
@@ -101,15 +101,15 @@ class Session {
     let active: any StreamFD
     let passive: any StreamFD
 
-    let readBuf = RingBuffer(capacity: 16384)
-    let sendBuf = RingBuffer(capacity: 16384)
+    let readBuf = RingBuffer<UInt8>(capacity: 16384)
+    let sendBuf = RingBuffer<UInt8>(capacity: 16384)
 
     init(active: any StreamFD, passive: any StreamFD) {
         self.active = active
         self.passive = passive
     }
 
-    func readBuf(of fd: any FD) -> RingBuffer {
+    func readBuf(of fd: any FD) -> RingBuffer<UInt8> {
         if active.handle() == fd.handle() {
             return readBuf
         } else {
@@ -117,7 +117,7 @@ class Session {
         }
     }
 
-    func sendBuf(of fd: any FD) -> RingBuffer {
+    func sendBuf(of fd: any FD) -> RingBuffer<UInt8> {
         if active.handle() == fd.handle() {
             return sendBuf
         } else {

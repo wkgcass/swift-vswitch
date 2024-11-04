@@ -1,20 +1,48 @@
-public class RingBuffer {
-    private let buf: [UInt8]
+public class RingBuffer<T> {
+    private var buf: [T]
     private var s = 0
     private var e = 0
     private var sIsAfterE = false
 
     public init(capacity: Int) {
-        self.buf = Arrays.newArray(capacity: capacity, uninitialized: true)
+        buf = Arrays.newArray(capacity: capacity, uninitialized: true)
     }
 
-    public func storeFrom(_ f: ([UInt8], Int, Int) throws -> Int) rethrows -> Int {
+    public func storeFromNoWrap(_ f: (inout [T], Int, Int) throws -> Int) rethrows -> Int {
+        if freeSpace() == 0 {
+            return 0
+        }
+        if !sIsAfterE {
+            let res = try f(&buf, e, buf.capacity - e)
+            if res < 0 {
+                return res
+            }
+            if res == 0 {
+                return 0
+            }
+            e += res
+            if e == buf.capacity {
+                e = 0
+                sIsAfterE = true
+            }
+            return res
+        } else {
+            let res = try f(&buf, e, s - e)
+            if res < 0 {
+                return res
+            }
+            e += res
+            return res
+        }
+    }
+
+    public func storeFrom(_ f: (inout [T], Int, Int) throws -> Int) rethrows -> Int {
         if freeSpace() == 0 {
             return 0
         }
         var n = 0
         if !sIsAfterE {
-            let res = try f(buf, e, buf.capacity - e)
+            let res = try f(&buf, e, buf.capacity - e)
             if res < 0 {
                 return res
             }
@@ -37,7 +65,7 @@ public class RingBuffer {
             }
         }
         assert(sIsAfterE && freeSpace() > 0)
-        let res = try f(buf, e, s - e)
+        let res = try f(&buf, e, s - e)
         if res < 0 {
             if n > 0 {
                 return n
@@ -48,7 +76,7 @@ public class RingBuffer {
         return n + res
     }
 
-    public func writeTo(_ f: ([UInt8], Int, Int) throws -> Int) rethrows -> Int {
+    public func writeTo(_ f: ([T], Int, Int) throws -> Int) rethrows -> Int {
         if usedSpace() == 0 {
             return 0
         }

@@ -93,7 +93,7 @@ class TcpEchoHandlerForTest: TcpHandler {
     private var dataLen = 0
 
     public func readable(_ ctx: borrowing HandlerContext) throws {
-        dataLen = try fd(ctx).read(buf, len: buf.capacity - 1)
+        dataLen = try fd(ctx).read(&buf, len: buf.capacity - 1)
         if dataLen < 0 {
             // EOF
             ctx.remove()
