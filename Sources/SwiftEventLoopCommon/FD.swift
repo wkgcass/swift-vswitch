@@ -13,8 +13,10 @@ public protocol FD<HandleType>: Equatable, Hashable, AnyObject {
 
     func write(_ buf: [UInt8], len: Int) throws(IOException) -> Int
     func write(_ buf: [UInt8], off: Int, len: Int) throws(IOException) -> Int
+    func write(_ buf: UnsafeRawPointer, len: Int) throws(IOException) -> Int
     func read(_ buf: inout [UInt8], len: Int) throws(IOException) -> Int
     func read(_ buf: inout [UInt8], off: Int, len: Int) throws(IOException) -> Int
+    func read(_ buf: UnsafeMutableRawPointer, len: Int) throws(IOException) -> Int
 }
 
 public extension FD {

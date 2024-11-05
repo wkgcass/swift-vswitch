@@ -42,12 +42,12 @@ public struct MacAddress: CustomStringConvertible, Equatable, Hashable {
     }
 
     public func isBroadcast() -> Bool {
-        return bytes.0 == 0xFF &&
-            bytes.1 == 0xFF &&
-            bytes.2 == 0xFF &&
-            bytes.3 == 0xFF &&
-            bytes.4 == 0xFF &&
-            bytes.5 == 0xFF
+        return bytes.0 == 0xff &&
+            bytes.1 == 0xff &&
+            bytes.2 == 0xff &&
+            bytes.3 == 0xff &&
+            bytes.4 == 0xff &&
+            bytes.5 == 0xff
     }
 
     public func isMulticast() -> Bool {

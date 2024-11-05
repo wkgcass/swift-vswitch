@@ -15,7 +15,10 @@ let PKB_FLAG_HAS_IP6_DST: UInt8 = 0b0010_0000
 
 public class PacketBuffer: CustomStringConvertible {
     public unowned var inputIface: (any Iface)? = nil
-    public package(set) unowned var broadcastDomain: BroadcastDomain? = nil
+    public package(set) unowned var bridge: Bridge? = nil
+    public package(set) unowned var netstack: NetStack? = nil
+    public var toBridge: UInt32 = 0
+    public var toNetstack: UInt32 = 0
 
     private var packetArray: [UInt8]? // keep reference to it, or nil if no need to keep ref
     public private(set) var raw: UnsafePointer<UInt8> // pointer to the packet
@@ -27,7 +30,7 @@ public class PacketBuffer: CustomStringConvertible {
     private var flags: UInt8 = 0
     private var srcmac_: MacAddress = .init(from: "00:00:00:00:00:00")!
     private var dstmac_: MacAddress = .init(from: "00:00:00:00:00:00")!
-    public private(set) var vlanState: VlanState = .UNKNOWN
+    public var vlanState: VlanState = .UNKNOWN
     public private(set) var vlan: UInt16 = 0
     public private(set) var ethertype: UInt16 = 0
     private var ip4Src: IPv4 = .init(from: "0.0.0.0")!
@@ -104,15 +107,15 @@ public class PacketBuffer: CustomStringConvertible {
     }
 
     public var arpOp: UInt8 {
-        return UInt8(srcPort & 0xFF)
+        return UInt8(srcPort & 0xff)
     }
 
     public var icmpType: UInt8 {
-        return UInt8(srcPort & 0xFF)
+        return UInt8(srcPort & 0xff)
     }
 
     public var icmpCode: UInt8 {
-        return UInt8(dstPort & 0xFF)
+        return UInt8(dstPort & 0xff)
     }
 
     public var pingId: UInt16 {
@@ -148,7 +151,7 @@ public class PacketBuffer: CustomStringConvertible {
 
     public init(_ other: PacketBuffer) {
         inputIface = other.inputIface
-        broadcastDomain = other.broadcastDomain
+        bridge = other.bridge
         if let otherPacketArray = other.packetArray {
             packetArray = Arrays.newArray(capacity: otherPacketArray.capacity, uninitialized: true)
             memcpy(&packetArray!, otherPacketArray, otherPacketArray.capacity)
@@ -337,7 +340,7 @@ public class PacketBuffer: CustomStringConvertible {
                 return
             }
 
-            let len = Int(ipPtr.pointee.version_ihl & 0x0F) * 4
+            let len = Int(ipPtr.pointee.version_ihl & 0x0f) * 4
             if len < 20 {
                 assert(Logger.lowLevelDebug("ipv4 len=\(len) < 20"))
                 return
@@ -411,7 +414,7 @@ public class PacketBuffer: CustomStringConvertible {
                 return
             }
 
-            let len = Int((tcpPtr.pointee.data_off >> 4) & 0xF) * 4
+            let len = Int((tcpPtr.pointee.data_off >> 4) & 0xf) * 4
             if len < 20 {
                 assert(Logger.lowLevelDebug("tcp data_off=\(len) < 20"))
                 return
@@ -573,6 +576,7 @@ public enum VlanState {
     case UNKNOWN
     case HAS_VLAN
     case NO_VLAN
+    case REMOVED
 }
 
 public enum CSumState {

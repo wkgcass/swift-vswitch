@@ -26,7 +26,7 @@ struct TestThread {
         thread.start()
         thread.join()
         let endTime = OS.currentTimeMillis()
-        #expect(endTime - startTime > 1000)
+        #expect(endTime - startTime >= 1000)
     }
 
     @Test func threadLocal() {

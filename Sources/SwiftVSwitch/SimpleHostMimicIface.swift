@@ -7,14 +7,16 @@ import SwiftVSwitchCHelper
 import VProxyCommon
 
 public class SimpleHostMimicIface: VirtualIface {
+    private var name_: String
     override public var name: String { "simple-host-mimic:\(name_)" }
     public private(set) var mac: MacAddress
     public private(set) var ip4 = Set<IPv4>()
     public private(set) var ip6 = Set<IPv6>()
 
     public init(name: String, mac: MacAddress) {
+        name_ = name
         self.mac = mac
-        super.init(name: name)
+        super.init()
     }
 
     private var packetsToSend: RingBuffer<PacketBuffer> = RingBuffer(capacity: 128)

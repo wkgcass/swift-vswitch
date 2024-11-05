@@ -3,7 +3,7 @@ public class Convert {
 
     @inlinable @inline(__always)
     public static func reverseByteOrder(_ n: UInt16) -> UInt16 {
-        return ((n >> 8) & 0xFF) | ((n & 0xFF) << 8)
+        return ((n >> 8) & 0xff) | ((n & 0xff) << 8)
     }
 
     @inline(__always)

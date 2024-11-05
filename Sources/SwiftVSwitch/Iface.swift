@@ -10,6 +10,7 @@ public protocol Iface: AnyObject, CustomStringConvertible, Hashable {
     func enqueue(_ pkb: PacketBuffer) -> Bool
     func completeTx()
 
+    var property: IfaceProperty { get }
     var statistics: IfaceStatistics { get set }
     var offload: IfaceOffload { get }
     func handle() -> IfaceHandle
@@ -19,6 +20,18 @@ public extension Iface {
     var description: String {
         return "\(name) -> \(statistics)"
     }
+}
+
+public struct IfaceProperty {
+    public let layer: IfaceLayer
+    public init(layer: IfaceLayer) {
+        self.layer = layer
+    }
+}
+
+public enum IfaceLayer {
+    case ETHER
+    case IP
 }
 
 public struct IfaceStatistics {
@@ -66,15 +79,14 @@ public class IfaceHandle: Equatable, Hashable {
 }
 
 public class VirtualIface: Iface {
-    public private(set) var name_: String
     public var statistics: IfaceStatistics
     public private(set) var offload: IfaceOffload
-    open var name: String { "virtual:\(name_)" }
+    open var name: String { "virtual" }
     private var ifaceInit_: IfaceInit? = nil
     public var ifaceInit: IfaceInit { ifaceInit_! }
+    open var property: IfaceProperty { IfaceProperty(layer: .ETHER) }
 
-    public init(name: String) {
-        name_ = name
+    public init() {
         statistics = IfaceStatistics()
         offload = IfaceOffload(
             rxcsum: .UNNECESSARY,

@@ -142,5 +142,5 @@ func getMask(_ masks: inout [UInt8], mask: Int) {
 
 func genPrefixByte(_ mask: Int) -> UInt8 {
     let m = min(max(mask, 0), 8)
-    return UInt8((0xFF << (8 - m)) & 0xFF)
+    return UInt8((0xff << (8 - m)) & 0xff)
 }

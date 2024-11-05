@@ -1,7 +1,7 @@
 import SwiftEventLoopCommon
 
-public class BroadcastDomain {
-    let macTable: MacTable
+public class Bridge {
+    public let macTable: MacTable
 
     init(loop: SelectorEventLoop, params: VSwitchParams) {
         macTable = MacTable(loop: loop, params: params)

@@ -1,4 +1,6 @@
 --ifdef outdent
+--hexliteralcase lowercase
+
 --disable redundantReturn
 --disable conditionalAssignment
 --disable andOperator

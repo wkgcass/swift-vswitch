@@ -170,12 +170,12 @@ open class PosixFD: FD, CustomStringConvertible {
     }
 
     public func write(_ buf: [UInt8], off: Int, len: Int) throws(IOException) -> Int {
-        return try write(Arrays.getRaw(from: buf), off: off, len: len)
+        return try write(Arrays.getRaw(from: buf, offset: off), len: len)
     }
 
-    public func write(_ buf: UnsafePointer<UInt8>, off: Int, len: Int) throws(IOException) -> Int {
+    public func write(_ buf: UnsafeRawPointer, len: Int) throws(IOException) -> Int {
         var errno: Int32 = 0
-        let n = writeWithErrno(fd, buf.advanced(by: off), len, &errno)
+        let n = writeWithErrno(fd, buf, len, &errno)
         if n < 0 {
             if errno == EWOULDBLOCK {
                 return 0
@@ -190,8 +190,12 @@ open class PosixFD: FD, CustomStringConvertible {
     }
 
     public func read(_ buf: inout [UInt8], off: Int = 0, len: Int) throws(IOException) -> Int {
+        return try read(Arrays.getRaw(from: buf, offset: off), len: len)
+    }
+
+    public func read(_ buf: UnsafeMutableRawPointer, len: Int) throws(IOException) -> Int {
         var errno: Int32 = 0
-        let n = readWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, &errno)
+        let n = readWithErrno(fd, buf, len, &errno)
         if n < 0 {
             if errno == EWOULDBLOCK {
                 return 0

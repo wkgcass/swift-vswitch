@@ -2,6 +2,7 @@ import ArgumentParser
 import SwiftEventLoopCommon
 import SwiftEventLoopPosix
 import SwiftVSwitch
+import SwiftVSwitchEthFwd
 import SwiftVSwitchTunTap
 import VProxyCommon
 
@@ -44,22 +45,22 @@ struct TapTunPingSample: ParsableCommand {
         let thread = FDProvider.get().newThread { loop.loop() }
         thread.start()
 
-        let vs = VSwitch(loop: loop, params: VSwitchParams())
-        vs.ensureBroadcastDomain(network: 1)
+        let vs = VSwitch(loop: loop, params: VSwitchParams(ethsw: EthernetFwdNodeManager()))
+        vs.ensureBridge(id: 1)
         vs.start()
 
         let mimic = SimpleHostMimicIface(name: "sample", mac: mac)
         for ip in ips {
             mimic.add(ip: ip)
         }
-        try vs.register(iface: mimic, network: 1)
+        try vs.register(iface: mimic, bridge: 1)
 
         if isTun {
             print("tun not supported yet ...")
             return
         } else {
             let tap = try TapIface.open(dev: devName)
-            try vs.register(iface: tap, network: 1)
+            try vs.register(iface: tap, bridge: 1)
         }
 
         thread.join()

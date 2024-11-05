@@ -30,6 +30,10 @@ public class Logger {
     public static func alert(_ msg: String) {
         info(.ALERT, msg)
     }
+
+    public static func shouldNotHappen(_ msg: String) {
+        error(.SHOULD_NOT_HAPPEN, msg)
+    }
 }
 
 public enum LogType {
@@ -38,4 +42,5 @@ public enum LogType {
     case SYS_ERROR
     case IMPROPER_USE
     case CONN_ERROR
+    case SHOULD_NOT_HAPPEN
 }

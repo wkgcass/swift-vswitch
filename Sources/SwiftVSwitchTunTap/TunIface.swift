@@ -1,55 +1,31 @@
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
+
 import SwiftEventLoopCommon
 import SwiftEventLoopPosix
 import SwiftVSwitch
 import SwiftVSwitchTunTapCHelper
 import VProxyCommon
 
-public class TapTunFD: PosixFD {
-    public static func openTap(dev: String) throws -> TapTunFD {
-        var tap = swvs_tap_info()
-        let ret = swvs_open_tap(dev, 0, &tap)
-        if ret != 0 {
-            throw IOException("failed to create tap device")
-        }
-        tap.dev_name.15 = 0
-        let p: UnsafePointer<CChar> = Convert.ptr2ptrUnsafe(&tap)
-        return TapTunFD(fd: tap.fd, dev: String(cString: p))
-    }
-
-    public static func openTun(dev: String) throws -> TapTunFD {
-        var tun = swvs_tap_info()
-        let ret = swvs_open_tap(dev, 1, &tun)
-        if ret != 0 {
-            throw IOException("failed to create tun device")
-        }
-        tun.dev_name.15 = 0
-        let p: UnsafePointer<CChar> = Convert.ptr2ptrUnsafe(&tun)
-        return TapTunFD(fd: tun.fd, dev: String(cString: p))
-    }
-
-    public let dev: String
-    init(fd: Int32, dev: String) {
-        self.dev = dev
-        super.init(fd: fd)
-    }
-}
-
-public class TapIface: Iface, Hashable {
+public class TunIface: Iface, Hashable {
     private let fd: TapTunFD
     public let name: String
     public var statistics = IfaceStatistics()
     public var offload: IfaceOffload
     private var ifaceInit_: IfaceInit? = nil
     public var ifaceInit: IfaceInit { ifaceInit_! }
-    public let property = IfaceProperty(layer: .ETHER)
+    public let property = IfaceProperty(layer: .IP)
 
-    public static func open(dev: String) throws -> TapIface {
-        return try TapIface(fd: TapTunFD.openTap(dev: dev))
+    public static func open(dev: String) throws -> TunIface {
+        return try TunIface(fd: TapTunFD.openTun(dev: dev))
     }
 
     private init(fd: TapTunFD) {
         self.fd = fd
-        name = "tap:\(fd.dev)"
+        name = "tun:\(fd.dev)"
         offload = IfaceOffload(
             rxcsum: .UNNECESSARY,
             txcsum: .NONE
@@ -106,10 +82,37 @@ public class TapIface: Iface, Hashable {
     }
 
     public func enqueue(_ pkb: PacketBuffer) -> Bool {
+        guard let ipPkt = pkb.ip else {
+            assert(Logger.lowLevelDebug("ip packet is not found"))
+            return false
+        }
+        var pktlen = pkb.pktlen - (ipPkt - pkb.raw)
+        let ver = (ipPkt.pointee >> 4) & 0xf
+
+        var raw: UnsafeMutablePointer<UInt8>
+#if os(Linux)
+        raw = Convert.ptr2mutptr(ipPkt)
+#else
+        if ipPkt - pkb.raw + pkb.headroom < 4 {
+            assert(Logger.lowLevelDebug("no enough room for af header"))
+            return false
+        } else {
+            raw = Convert.ptr2mutptr(ipPkt.advanced(by: -4))
+        }
+        pktlen += 4
+        raw.pointee = 0
+        raw.advanced(by: 1).pointee = 0
+        raw.advanced(by: 2).pointee = 0
+        if ver == 4 {
+            raw.advanced(by: 3).pointee = SwiftVSwitch.AF_INET
+        } else {
+            raw.advanced(by: 3).pointee = SwiftVSwitch.AF_INET6
+        }
+#endif
         do {
-            let n = try fd.write(pkb.raw, len: pkb.pktlen)
+            let n = try fd.write(raw, len: pktlen)
             assert(Logger.lowLevelDebug("wrote packet of len=\(n)"))
-            return n == pkb.pktlen
+            return n == pktlen
         } catch {
             Logger.error(.SOCKET_ERROR, "failed to send packet to \(fd)", error)
             return false
@@ -134,7 +137,7 @@ public class TapIface: Iface, Hashable {
         return handle_
     }
 
-    public static func == (lhs: TapIface, rhs: TapIface) -> Bool {
+    public static func == (lhs: TunIface, rhs: TunIface) -> Bool {
         return lhs.handle() == rhs.handle()
     }
 }
