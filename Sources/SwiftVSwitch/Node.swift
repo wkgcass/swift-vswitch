@@ -341,7 +341,18 @@ class DevOutput: Node {
             // no need to calculate
         } else {
             // do re-calculate
-            vproxy_pkt_ether_csum(Convert.ptr2mutUnsafe(pkb.raw), Int32(pkb.pktlen), VPROXY_CSUM_ALL)
+            if iface.meta.property.layer == .IP {
+                if let ip = pkb.ip {
+                    var out = vproxy_csum_out()
+                    if pkb.ethertype == ETHER_TYPE_IPv4 {
+                        vproxy_pkt_ipv4_csum(Convert.ptr2mutUnsafe(ip), Int32(pkb.lengthFromIpToEnd), VPROXY_CSUM_ALL, &out)
+                    } else if pkb.ethertype == ETHER_TYPE_IPv6 {
+                        vproxy_pkt_ipv6_csum(Convert.ptr2mutUnsafe(ip), Int32(pkb.lengthFromIpToEnd), VPROXY_CSUM_ALL, &out)
+                    }
+                }
+            } else {
+                vproxy_pkt_ether_csum(Convert.ptr2mutUnsafe(pkb.raw), Int32(pkb.pktlen), VPROXY_CSUM_ALL)
+            }
             pkb.csumState = .COMPLETE
         }
 
@@ -354,7 +365,11 @@ class DevOutput: Node {
             iface.meta.statistics.txerr += 1
             return false
         }
-        iface.meta.statistics.txbytes += UInt64(pkb.pktlen)
+        if iface.meta.property.layer == .IP {
+            iface.meta.statistics.txbytes += UInt64(pkb.lengthFromIpToEnd)
+        } else {
+            iface.meta.statistics.txbytes += UInt64(pkb.pktlen)
+        }
         iface.meta.statistics.txpkts += 1
         return true
     }

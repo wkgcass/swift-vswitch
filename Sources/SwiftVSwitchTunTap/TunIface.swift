@@ -60,9 +60,14 @@ public class TunIface: Iface, Hashable {
                 buf = lastBuf!
                 lastBuf = nil
             }
+            var readOff = VSwitchReservedHeadroom
+#if os(Linux)
+#else
+            readOff -= 4
+#endif
             let n: Int
             do {
-                n = try fd.read(&buf, off: VSwitchReservedHeadroom, len: VSwitchDefaultPacketBufferSize - VSwitchReservedHeadroom)
+                n = try fd.read(&buf, off: readOff, len: VSwitchDefaultPacketBufferSize - readOff)
             } catch {
                 Logger.error(.SOCKET_ERROR, "failed to read packet from \(fd)", error)
                 break
@@ -77,7 +82,8 @@ public class TunIface: Iface, Hashable {
                                    offset: 0,
                                    pktlen: n,
                                    headroom: VSwitchReservedHeadroom,
-                                   tailroom: VSwitchDefaultPacketBufferSize - n - VSwitchReservedHeadroom)
+                                   tailroom: VSwitchDefaultPacketBufferSize - n - VSwitchReservedHeadroom,
+                                   hasEthernet: false)
             packets[off] = pkb
             off += 1
         }
@@ -106,9 +112,9 @@ public class TunIface: Iface, Hashable {
         raw.advanced(by: 1).pointee = 0
         raw.advanced(by: 2).pointee = 0
         if ver == 4 {
-            raw.advanced(by: 3).pointee = SwiftVSwitch.AF_INET
+            raw.advanced(by: 3).pointee = UInt8(AF_INET)
         } else {
-            raw.advanced(by: 3).pointee = SwiftVSwitch.AF_INET6
+            raw.advanced(by: 3).pointee = UInt8(AF_INET6)
         }
 #endif
         do {

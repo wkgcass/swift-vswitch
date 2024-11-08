@@ -50,8 +50,8 @@ int swvs_open_tap(const char* dev_chars, uint8_t is_tun, struct swvs_tap_info* r
         goto fail;
     }
 
-    strncpy(dev_name, ifr.ifr_name, IFNAMSIZ);
-    dev_name[IFNAMSIZ-1] = '\0';
+    strncpy(ret->dev_name, ifr.ifr_name, IFNAMSIZ);
+    ret->dev_name[IFNAMSIZ-1] = '\0';
 // end ifdef __linux__
 #elif defined(__APPLE__)
     if (!is_tun) {
@@ -86,10 +86,10 @@ int swvs_open_tap(const char* dev_chars, uint8_t is_tun, struct swvs_tap_info* r
     if (connect(fd, (struct sockaddr*) &sc, sizeof(sc)) < 0) {
         goto fail;
     }
+    strncpy(ret->dev_name, dev_chars, IFNAMSIZ);
+    ret->dev_name[IFNAMSIZ-1] = '\0';
 #endif
 
-    strncpy(ret->dev_name, dev_name, IFNAMSIZ);
-    ret->dev_name[IFNAMSIZ-1] = '\0';
     ret->fd = fd;
     return 0;
 fail:

@@ -104,6 +104,12 @@ struct swvs_udphdr {
 
 // =========== composed ===========
 
+struct swvs_compose_eth_vlan {
+    struct swvs_ethhdr  ethhdr;
+    struct swvs_vlantag vlan;
+} __attribute__((packed));
+
+// used for building arp request
 struct swvs_compose_eth_arp {
     struct swvs_ethhdr ethhdr;
     struct swvs_arp    arp;
@@ -131,6 +137,7 @@ struct swvs_compose_icmpv6_na_tlla {
     struct swvs_icmp_ndp_opt_link_layer_addr opt;
 } __attribute__((packed));
 
+// used for building ndp ns
 struct swvs_compose_eth_ip6_icmp6_ns_slla {
     struct swvs_ethhdr   ethhdr;
     struct swvs_ipv6hdr  v6;

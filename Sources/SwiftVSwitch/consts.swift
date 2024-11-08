@@ -43,8 +43,5 @@ public let ICMP_PROTOCOL_CODE_PORT_UNREACHABLE: UInt8 = 3
 public let ICMPv6_PROTOCOL_TYPE_DEST_UNREACHABLE: UInt8 = 1
 public let ICMPv6_PROTOCOL_CODE_PORT_UNREACHABLE: UInt8 = 4
 
-public let AF_INET: UInt8 = 2
-public let AF_INET6: UInt8 = 10
-
 public nonisolated(unsafe) let IPv6_LINK_LOCAL_ADDRS = NetworkV6(from: "fe80::/10")!
 public nonisolated(unsafe) let IPv6_Solicitation_Node_Multicast_Address = GetIP(from: "ff02::1:ff00:0")!

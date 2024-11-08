@@ -2,6 +2,7 @@ import Foundation
 
 public struct MacAddress: CustomStringConvertible, Equatable, Hashable {
     public nonisolated(unsafe) static let BROADCAST = MacAddress(from: "ff:ff:ff:ff:ff:ff")!
+    public nonisolated(unsafe) static let ZERO = MacAddress(from: "00:00:00:00:00:00")!
 
     public let bytes: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8)
 

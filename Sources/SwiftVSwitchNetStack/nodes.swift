@@ -34,9 +34,9 @@ class DevInput: SwiftVSwitch.DevInput {
     }
 
     override public func schedule0(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
-        if pkb.dstmac != nil {
+        if pkb.ether != nil {
             return sched.schedule(pkb, to: ethernetInput)
-        } else if pkb.ipDst != nil {
+        } else if pkb.ethertype == ETHER_TYPE_IPv4 || pkb.ethertype == ETHER_TYPE_IPv6 {
             return sched.schedule(pkb, to: ipRoute)
         } else {
             assert(Logger.lowLevelDebug("not ethernet packet nor ip packet, skipping ..."))
@@ -47,8 +47,7 @@ class DevInput: SwiftVSwitch.DevInput {
 
 class EthernetInput: Node {
     private var arpInput = NodeRef("arp-input")
-    private var ip4Input = NodeRef("ip4-input")
-    private var ip6Input = NodeRef("ip6-input")
+    private var ipRoute = NodeRef("ip-route")
 
     init() {
         super.init(name: "ethernet-input")
@@ -57,8 +56,7 @@ class EthernetInput: Node {
     override func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
         mgr.initRef(&arpInput)
-        mgr.initRef(&ip4Input)
-        mgr.initRef(&ip6Input)
+        mgr.initRef(&ipRoute)
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
@@ -82,10 +80,8 @@ class EthernetInput: Node {
 
         if pkb.ethertype == ETHER_TYPE_ARP {
             return sched.schedule(pkb, to: arpInput)
-        } else if pkb.ethertype == ETHER_TYPE_IPv4 {
-            return sched.schedule(pkb, to: ip4Input)
-        } else if pkb.ethertype == ETHER_TYPE_IPv6 {
-            return sched.schedule(pkb, to: ip6Input)
+        } else if pkb.ethertype == ETHER_TYPE_IPv4 || pkb.ethertype == ETHER_TYPE_IPv6 {
+            return sched.schedule(pkb, to: ipRoute)
         } else {
             assert(Logger.lowLevelDebug("unknown ether_type \(pkb.ethertype)"))
             return sched.schedule(pkb, to: drop)
@@ -162,7 +158,7 @@ class ArpReqInput: Node {
         pkb.srcmac!.copyInto(&arp.pointee.arp_tha)
         pkb.ipSrc!.copyInto(&arp.pointee.arp_tip)
 
-        pkb.calcPacketInfo()
+        pkb.clearPacketInfo(from: .ETHER)
         pkb.outputIface = pkb.inputIface
         return sched.schedule(pkb, to: ethernetOutput)
     }
@@ -189,6 +185,17 @@ class IPRoute: Node {
             assert(Logger.lowLevelDebug("not valid packet"))
             return sched.schedule(pkb, to: drop)
         }
+
+        if pkb.netstack == nil {
+            let netstackId = pkb.inputIface!.toNetstack
+            let netstack = nodeInit.sw.netstacks[netstackId]
+            if netstack == nil {
+                assert(Logger.lowLevelDebug("netstack \(netstackId) not found"))
+                return sched.schedule(pkb, to: drop)
+            }
+            pkb.netstack = netstack
+        }
+
         if let v4 = pkb.ipDst as? IPv4 {
             if pkb.netstack!.ipv4[v4] != nil {
                 return sched.schedule(pkb, to: ip4Input)
@@ -290,7 +297,7 @@ class PingReqInput: Node {
             icmp.pointee.type = ICMPv6_PROTOCOL_TYPE_ECHO_RESP
         }
 
-        pkb.calcPacketInfo()
+        pkb.clearPacketInfo(from: .IP)
         return sched.schedule(pkb, to: ipRouteOutput)
     }
 }
@@ -463,7 +470,7 @@ class NdpNsInput: Node {
         ip.pointee.be_payload_len = Convert.reverseByteOrder(Convert.reverseByteOrder(
             ip.pointee.be_payload_len - UInt16(lenDelta)))
 
-        pkb.calcPacketInfo()
+        pkb.clearPacketInfo(from: .ETHER)
         pkb.outputIface = pkb.inputIface
         return sched.schedule(pkb, to: ethernetOutput)
     }
@@ -659,10 +666,14 @@ class EthernetOutput: Node {
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
         assert(pkb.outputIface != nil)
-        let ether: UnsafeMutablePointer<swvs_ethhdr> = Convert.ptr2mutUnsafe(pkb.raw)
+        let ether = pkb.ensureEthhdr()
+        guard let ether else {
+            assert(Logger.lowLevelDebug("failed to retrieve ethhdr"))
+            return sched.schedule(pkb, to: drop)
+        }
         pkb.outputIface!.mac.copyInto(&ether.pointee.src)
 
-        pkb.clearPacketInfo()
+        pkb.clearPacketInfo(from: .ETHER)
         return sched.schedule(pkb, to: devOutput)
     }
 }

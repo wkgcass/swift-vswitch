@@ -39,8 +39,9 @@ public class SimpleHostMimicIface: VirtualIface {
             return false
         }
         let ifMac = pkb.outputIface!.mac
+        pkb.outputIface = nil
         let dstMac = MacAddress(raw: &ether.pointee.dst)
-        if dstMac != pkb.outputIface!.mac && dstMac.isUnicast() {
+        if dstMac != ifMac && dstMac.isUnicast() {
             assert(Logger.lowLevelDebug("the packet is not for \(name)"))
             return false
         }
@@ -74,7 +75,7 @@ public class SimpleHostMimicIface: VirtualIface {
             pkb.srcmac!.copyInto(&arp.pointee.arp_tha)
             pkb.ipSrc!.copyInto(&arp.pointee.arp_tip)
 
-            pkb.calcPacketInfo()
+            pkb.clearPacketInfo(from: .ETHER)
         } else if pkb.ethertype == ETHER_TYPE_IPv4 {
             assert(Logger.lowLevelDebug("input is ipv4?"))
 
@@ -111,7 +112,7 @@ public class SimpleHostMimicIface: VirtualIface {
             pkb.srcmac!.copyInto(&ether.pointee.dst)
             ifMac.copyInto(&ether.pointee.src)
 
-            pkb.calcPacketInfo()
+            pkb.clearPacketInfo(from: .ETHER)
         } else if pkb.ethertype == ETHER_TYPE_IPv6 {
             assert(Logger.lowLevelDebug("input is ipv6?"))
 
@@ -233,7 +234,7 @@ public class SimpleHostMimicIface: VirtualIface {
                 return false
             }
 
-            pkb.calcPacketInfo()
+            pkb.clearPacketInfo(from: .ETHER)
         } else {
             assert(Logger.lowLevelDebug("not arp/ipv4/ipv6"))
             return false
