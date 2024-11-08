@@ -47,3 +47,4 @@ public let AF_INET: UInt8 = 2
 public let AF_INET6: UInt8 = 10
 
 public nonisolated(unsafe) let IPv6_LINK_LOCAL_ADDRS = NetworkV6(from: "fe80::/10")!
+public nonisolated(unsafe) let IPv6_Solicitation_Node_Multicast_Address = GetIP(from: "ff02::1:ff00:0")!

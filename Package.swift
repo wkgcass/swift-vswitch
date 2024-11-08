@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "swift-eventloop-posix", targets: ["SwiftEventLoopPosix"]),
         .library(name: "swift-vswitch", targets: ["SwiftVSwitch"]),
         .library(name: "swift-vswitch-ethfwd", targets: ["SwiftVSwitchEthFwd"]),
+        .library(name: "swift-vswitch-netstack", targets: ["SwiftVSwitchNetStack"]),
         .library(name: "swift-vswitch-tuntap", targets: ["SwiftVSwitchTunTap"]),
         .executable(name: "sample-eventloop", targets: ["Sample_EventLoop"]),
         .executable(name: "sample-taptunping", targets: ["Sample_TapTunPing"]),
@@ -25,6 +26,7 @@ let package = Package(
         .target(
             name: "VProxyCommon",
             dependencies: [
+                "VProxyCommonCHelper",
                 .product(name: "Collections", package: "swift-collections"),
             ]
         ),
@@ -42,7 +44,7 @@ let package = Package(
         .target(
             name: "SwiftVSwitch",
             dependencies: [
-                "SwiftEventLoopCommon", "VProxyChecksum", "SwiftVSwitchCHelper",
+                "SwiftEventLoopCommon", "VProxyChecksum", "SwiftVSwitchCHelper", "poptrie",
             ]
         ),
         // vswitch tuntap ifaces
@@ -55,6 +57,13 @@ let package = Package(
         // ethernet forwarding node graph
         .target(
             name: "SwiftVSwitchEthFwd",
+            dependencies: [
+                "SwiftVSwitch",
+            ]
+        ),
+        // netstack node graph
+        .target(
+            name: "SwiftVSwitchNetStack",
             dependencies: [
                 "SwiftVSwitch",
             ]
@@ -79,12 +88,15 @@ let package = Package(
                 "SwiftVSwitchTunTap",
                 "SwiftEventLoopPosix",
                 "SwiftVSwitchEthFwd",
+                "SwiftVSwitchNetStack",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
         // ---
         // native implementations
         // ...
+        .target(
+            name: "VProxyCommonCHelper"),
         .target(
             name: "SwiftEventLoopPosixCHelper"),
         .target(
@@ -101,6 +113,13 @@ let package = Package(
             exclude: ["ae_epoll.c", "ae_epoll_poll.c", "ae_evport.c", "ae_kqueue.c", "ae_poll.c", "ae_select.c"],
             cSettings: [
                 .unsafeFlags(["-Wall", "-Wno-shorten-64-to-32", "-Wno-unused-function"]),
+            ]
+        ),
+        .target(
+            name: "poptrie",
+            path: "submodules/poptrie",
+            cSettings: [
+                .unsafeFlags(["-Wall", "-Wno-shorten-64-to-32"]),
             ]
         ),
         // test cases

@@ -53,6 +53,10 @@ public struct IPv4: IP {
                       u8p.advanced(by: 2).pointee, u8p.advanced(by: 3).pointee)
     }
 
+    public func toUInt32() -> UInt32 {
+        return (UInt32(bytes.0) << 24) | (UInt32(bytes.1) << 16) | (UInt32(bytes.2) << 8) | UInt32(bytes.3)
+    }
+
     public func copyInto(_ p: UnsafeMutableRawPointer) {
         let u8p: UnsafeMutablePointer<UInt8> = Convert.mutraw2mutptr(p)
         u8p.pointee = bytes.0
@@ -102,6 +106,10 @@ public struct IPv6: IP {
         bytes = IPv6.format(&tmp)
     }
 
+    public func isMulticast() -> Bool {
+        return bytes.0 == 0xff
+    }
+
     private static func format(_ p: UnsafeRawPointer) -> (UInt8, UInt8, UInt8, UInt8,
                                                           UInt8, UInt8, UInt8, UInt8,
                                                           UInt8, UInt8, UInt8, UInt8,
@@ -122,6 +130,14 @@ public struct IPv6: IP {
             u8p.advanced(by: 8).pointee, u8p.advanced(by: 9).pointee, u8p.advanced(by: 10).pointee, u8p.advanced(by: 11).pointee,
             u8p.advanced(by: 12).pointee, u8p.advanced(by: 13).pointee, u8p.advanced(by: 14).pointee, u8p.advanced(by: 15).pointee
         )
+    }
+
+    public func toUInt128() -> (UInt64, UInt64) {
+        let h = (UInt64(bytes.0) << 56) | (UInt64(bytes.1) << 48) | (UInt64(bytes.2) << 40) | (UInt64(bytes.3) << 32) |
+            (UInt64(bytes.4) << 24) | (UInt64(bytes.5) << 16) | (UInt64(bytes.6) << 8) | UInt64(bytes.7)
+        let l = (UInt64(bytes.8) << 56) | (UInt64(bytes.9) << 48) | (UInt64(bytes.10) << 40) | (UInt64(bytes.11) << 32) |
+            (UInt64(bytes.12) << 24) | (UInt64(bytes.13) << 16) | (UInt64(bytes.14) << 8) | UInt64(bytes.15)
+        return (l, h)
     }
 
     public func copyInto(_ p: UnsafeMutableRawPointer) {
@@ -149,12 +165,12 @@ public struct IPv6: IP {
 
     public var description: String {
         // 1234:6789:1234:6789:1234:6789:1234:6789\0
-        let str: [CChar] = Arrays.newArray(capacity: 40, uninitialized: true)
+        var str: [CChar] = Arrays.newArray(capacity: 40, uninitialized: true)
         var raw = in6_addr()
         copyInto(&raw)
-        inet_ntop(AF_INET6, &raw, Arrays.getRaw(from: str), 40)
+        inet_ntop(AF_INET6, &raw, &str, 40)
         // should always succeed
-        return String(cString: Arrays.getRaw(from: str))
+        return String(cString: &str)
     }
 
     public func hash(into hasher: inout Hasher) {

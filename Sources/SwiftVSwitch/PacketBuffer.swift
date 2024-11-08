@@ -14,11 +14,12 @@ let PKB_FLAG_HAS_IP6_SRC: UInt8 = 0b0001_0000
 let PKB_FLAG_HAS_IP6_DST: UInt8 = 0b0010_0000
 
 public class PacketBuffer: CustomStringConvertible {
-    public unowned var inputIface: (any Iface)? = nil
+    public var useOwned: Bool = false
+
+    public unowned var inputIface: IfaceEx? = nil
     public package(set) unowned var bridge: Bridge? = nil
     public package(set) unowned var netstack: NetStack? = nil
-    public var toBridge: UInt32 = 0
-    public var toNetstack: UInt32 = 0
+    public unowned var outputIface: IfaceEx? = nil
 
     private var packetArray: [UInt8]? // keep reference to it, or nil if no need to keep ref
     public private(set) var raw: UnsafePointer<UInt8> // pointer to the packet
@@ -46,8 +47,7 @@ public class PacketBuffer: CustomStringConvertible {
     public private(set) var upper: UnsafePointer<UInt8>?
     public private(set) var app: UnsafePointer<UInt8>?
 
-    // will only be set after routing
-    public unowned var outputIface: (any Iface)? = nil
+    public var outputRouteRule: RouteTable.RouteRule? = nil
 
     public var lengthFromIpToEnd: Int {
         guard let ip else {
@@ -150,6 +150,7 @@ public class PacketBuffer: CustomStringConvertible {
     }
 
     public init(_ other: PacketBuffer) {
+        useOwned = other.useOwned
         inputIface = other.inputIface
         bridge = other.bridge
         if let otherPacketArray = other.packetArray {
@@ -198,6 +199,7 @@ public class PacketBuffer: CustomStringConvertible {
             app = nil
         }
         outputIface = other.outputIface
+        outputRouteRule = other.outputRouteRule
     }
 
     public func occpuyHeadroom(_ n: Int) -> Bool {
@@ -567,7 +569,7 @@ public class PacketBuffer: CustomStringConvertible {
         if ret.hasSuffix(",") {
             ret.removeLast()
         }
-        ret += ")"
+        ret += ")@\(Unmanaged.passUnretained(self).toOpaque())"
         return ret
     }
 }

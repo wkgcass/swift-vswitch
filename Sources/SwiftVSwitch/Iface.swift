@@ -10,15 +10,26 @@ public protocol Iface: AnyObject, CustomStringConvertible, Hashable {
     func enqueue(_ pkb: PacketBuffer) -> Bool
     func completeTx()
 
-    var property: IfaceProperty { get }
-    var statistics: IfaceStatistics { get set }
-    var offload: IfaceOffload { get }
+    var meta: IfaceMetadata { get set }
     func handle() -> IfaceHandle
 }
 
 public extension Iface {
     var description: String {
-        return "\(name) -> \(statistics)"
+        return "\(name) -> \(meta.statistics)"
+    }
+}
+
+public struct IfaceMetadata {
+    public let property: IfaceProperty
+    public var statistics: IfaceStatistics
+    public let offload: IfaceOffload
+    public let initialMac: MacAddress?
+    public init(property: IfaceProperty, offload: IfaceOffload, initialMac: MacAddress?) {
+        self.property = property
+        statistics = IfaceStatistics()
+        self.offload = offload
+        self.initialMac = initialMac
     }
 }
 
@@ -78,20 +89,25 @@ public class IfaceHandle: Equatable, Hashable {
     }
 }
 
-public class VirtualIface: Iface {
-    public var statistics: IfaceStatistics
-    public private(set) var offload: IfaceOffload
+open class VirtualIface: Iface {
+    public var meta: IfaceMetadata
     open var name: String { "virtual" }
     private var ifaceInit_: IfaceInit? = nil
     public var ifaceInit: IfaceInit { ifaceInit_! }
-    open var property: IfaceProperty { IfaceProperty(layer: .ETHER) }
 
     public init() {
-        statistics = IfaceStatistics()
-        offload = IfaceOffload(
-            rxcsum: .UNNECESSARY,
-            txcsum: .UNNECESSARY
+        meta = IfaceMetadata(
+            property: IfaceProperty(layer: .ETHER),
+            offload: IfaceOffload(
+                rxcsum: .UNNECESSARY,
+                txcsum: .UNNECESSARY
+            ),
+            initialMac: nil
         )
+    }
+
+    public init(meta: IfaceMetadata) {
+        self.meta = meta
     }
 
     open func initialize(_ ifaceInit: IfaceInit) throws(IOException) {

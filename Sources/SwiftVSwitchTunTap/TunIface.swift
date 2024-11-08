@@ -13,11 +13,9 @@ import VProxyCommon
 public class TunIface: Iface, Hashable {
     private let fd: TapTunFD
     public let name: String
-    public var statistics = IfaceStatistics()
-    public var offload: IfaceOffload
     private var ifaceInit_: IfaceInit? = nil
     public var ifaceInit: IfaceInit { ifaceInit_! }
-    public let property = IfaceProperty(layer: .IP)
+    public var meta: IfaceMetadata
 
     public static func open(dev: String) throws -> TunIface {
         return try TunIface(fd: TapTunFD.openTun(dev: dev))
@@ -26,9 +24,13 @@ public class TunIface: Iface, Hashable {
     private init(fd: TapTunFD) {
         self.fd = fd
         name = "tun:\(fd.dev)"
-        offload = IfaceOffload(
-            rxcsum: .UNNECESSARY,
-            txcsum: .NONE
+        meta = IfaceMetadata(
+            property: IfaceProperty(layer: .IP),
+            offload: IfaceOffload(
+                rxcsum: .UNNECESSARY,
+                txcsum: .NONE
+            ),
+            initialMac: nil
         )
     }
 

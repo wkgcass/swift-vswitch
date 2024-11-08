@@ -7,7 +7,7 @@ public class Bridge {
         macTable = MacTable(loop: loop, params: params)
     }
 
-    public func remove(iface: any Iface) {
+    public func remove(iface: IfaceEx) {
         macTable.remove(iface: iface)
     }
 

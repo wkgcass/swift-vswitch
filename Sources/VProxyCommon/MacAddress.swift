@@ -1,6 +1,8 @@
 import Foundation
 
 public struct MacAddress: CustomStringConvertible, Equatable, Hashable {
+    public nonisolated(unsafe) static let BROADCAST = MacAddress(from: "ff:ff:ff:ff:ff:ff")!
+
     public let bytes: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8)
 
     public init(raw: UnsafeRawPointer) {
@@ -95,5 +97,16 @@ public struct MacAddress: CustomStringConvertible, Equatable, Hashable {
 
     public static func == (lhs: MacAddress, rhs: MacAddress) -> Bool {
         return lhs.bytes == rhs.bytes
+    }
+
+    public static func random() -> MacAddress {
+        var bytes: [UInt8] = Arrays.newArray(capacity: 6)
+        for i in 0 ..< 6 {
+            bytes[i] = UInt8.random(in: 0 ... 255)
+        }
+        // x2 x6 xA xE
+        bytes[0] &= 0b1111_1110
+        bytes[0] |= 0b0000_0010
+        return MacAddress(raw: bytes)
     }
 }

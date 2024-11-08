@@ -19,16 +19,11 @@ class DevInput: SwiftVSwitch.DevInput {
 
     override public func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
-        mgr.initNode(&ethernetInput)
+        mgr.initRef(&ethernetInput)
     }
 
     override public func schedule0(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
-        guard let _ = pkb.inputIface else {
-            assert(Logger.lowLevelDebug("inputIface not present in pkb"))
-            return sched.schedule(pkb, to: drop)
-        }
-
-        if pkb.ethertype == 0 {
+        if pkb.dstmac == nil {
             assert(Logger.lowLevelDebug("not ethernet packet"))
             return sched.schedule(pkb, to: drop)
         }
@@ -48,10 +43,10 @@ class EthernetInput: Node {
 
     override func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
-        mgr.initNode(&broadcastInput)
-        mgr.initNode(&multicastInput)
-        mgr.initNode(&unicastInput)
-        mgr.initNode(&vlanInput)
+        mgr.initRef(&broadcastInput)
+        mgr.initRef(&multicastInput)
+        mgr.initRef(&unicastInput)
+        mgr.initRef(&vlanInput)
     }
 
     override public func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
@@ -59,14 +54,15 @@ class EthernetInput: Node {
             return sched.schedule(pkb, to: vlanInput)
         }
 
-        guard let _ = pkb.bridge else {
+        guard let bridge = nodeInit.sw.bridges[pkb.inputIface!.toBridge] else {
             assert(Logger.lowLevelDebug("bridge not present in pkb"))
             return sched.schedule(pkb, to: drop)
         }
+        pkb.bridge = bridge
 
         let dstmac = pkb.dstmac!
         let srcmac = pkb.srcmac!
-        pkb.bridge!.macTable.record(mac: srcmac, iface: pkb.inputIface!)
+        bridge.macTable.record(mac: srcmac, iface: pkb.inputIface!)
 
         if dstmac.isBroadcast() {
             return sched.schedule(pkb, to: broadcastInput)
@@ -79,7 +75,7 @@ class EthernetInput: Node {
 }
 
 class VLanInput: Node {
-    private var ethernetInput = NodeRef("vlan-input")
+    private var ethernetInput = NodeRef("ethernet-input")
 
     init() {
         super.init(name: "vlan-input")
@@ -87,7 +83,7 @@ class VLanInput: Node {
 
     override func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
-        mgr.initNode(&ethernetInput)
+        mgr.initRef(&ethernetInput)
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
@@ -105,7 +101,7 @@ class MulticastInput: Node {
 
     override func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
-        mgr.initNode(&broadcastOutput)
+        mgr.initRef(&broadcastOutput)
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
@@ -122,7 +118,7 @@ class BroadcastInput: Node {
 
     override func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
-        mgr.initNode(&broadcastOutput)
+        mgr.initRef(&broadcastOutput)
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
@@ -139,7 +135,7 @@ class BroadcastOutput: Node {
 
     override func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
-        mgr.initNode(&devOutput)
+        mgr.initRef(&devOutput)
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
@@ -164,8 +160,8 @@ class UnicastInput: Node {
 
     override func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
-        mgr.initNode(&devOutput)
-        mgr.initNode(&floodOutput)
+        mgr.initRef(&devOutput)
+        mgr.initRef(&floodOutput)
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
@@ -196,7 +192,7 @@ class FloodOutput: Node {
 
     override func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
-        mgr.initNode(&broadcastOutput)
+        mgr.initRef(&broadcastOutput)
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {

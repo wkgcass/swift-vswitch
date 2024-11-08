@@ -3,23 +3,23 @@ import SwiftEventLoopCommon
 import VProxyCommon
 
 public class MacTable: CustomStringConvertible {
-    private var timeoutMillis: Int
     private let loop: SelectorEventLoop
+    private var params: VSwitchParams
 
     public init(loop: SelectorEventLoop, params: VSwitchParams) {
-        timeoutMillis = params.macTableTimeoutMillis
         self.loop = loop
+        self.params = params
     }
 
     private var entries = Set<MacEntry>()
     private var macMap = [MacAddress: MacEntry]()
     private var ifaceMap = [IfaceHandle: Set<MacEntry>]()
 
-    public func record(mac: MacAddress, iface: any Iface) {
+    public func record(mac: MacAddress, iface: IfaceEx) {
         record(mac: mac, iface: iface, persist: false)
     }
 
-    public func record(mac: MacAddress, iface: any Iface, persist: Bool) {
+    public func record(mac: MacAddress, iface: IfaceEx, persist: Bool) {
         let entry = macMap[mac]
         if let entry, entry.iface.handle() == iface.handle() {
             if persist {
@@ -38,7 +38,7 @@ public class MacTable: CustomStringConvertible {
         e.record()
     }
 
-    public func disconnect(iface: any Iface) {
+    public func disconnect(iface: IfaceEx) {
         guard var set = ifaceMap[iface.handle()] else {
             return
         }
@@ -48,7 +48,7 @@ public class MacTable: CustomStringConvertible {
         }
     }
 
-    public func lookup(mac: MacAddress) -> (any Iface)? {
+    public func lookup(mac: MacAddress) -> (IfaceEx)? {
         return macMap[mac]?.iface
     }
 
@@ -64,7 +64,7 @@ public class MacTable: CustomStringConvertible {
     }
 
     public func setTimeout(timeoutMillis: Int) {
-        self.timeoutMillis = timeoutMillis
+        params.macTableTimeoutMillis = timeoutMillis
         loop.runOnLoop {
             for entry in self.entries {
                 entry.setTimeout(millis: timeoutMillis)
@@ -79,7 +79,7 @@ public class MacTable: CustomStringConvertible {
         entry.cancel(isTimeout: false)
     }
 
-    public func remove(iface: any Iface) {
+    public func remove(iface: IfaceEx) {
         guard let set = ifaceMap[iface.handle()] else {
             return
         }
@@ -99,15 +99,15 @@ public class MacTable: CustomStringConvertible {
     public class MacEntry: Timer, Equatable, Hashable, CustomStringConvertible {
         let parent: MacTable
         let mac: MacAddress
-        let iface: any Iface
+        let iface: IfaceEx
         private var offloaded = false
         private var offloadedCount = 0
 
-        init(parent: MacTable, mac: MacAddress, iface: any Iface, persist: Bool) {
+        init(parent: MacTable, mac: MacAddress, iface: IfaceEx, persist: Bool) {
             self.parent = parent
             self.mac = mac
             self.iface = iface
-            super.init(loop: parent.loop, timeoutMillis: persist ? -1 : parent.timeoutMillis)
+            super.init(loop: parent.loop, timeoutMillis: persist ? -1 : parent.params.macTableTimeoutMillis)
         }
 
         func record() {

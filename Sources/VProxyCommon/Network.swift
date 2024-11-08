@@ -12,6 +12,14 @@ public extension Network {
     }
 }
 
+public func GetNetwork(from: String) -> (any Network)? {
+    let v4 = NetworkV4(from: from)
+    if v4 != nil {
+        return v4
+    }
+    return NetworkV6(from: from)
+}
+
 public struct NetworkV4: Network {
     public let ipv4: IPv4
     public var ip: any IP { ipv4 }
@@ -39,6 +47,24 @@ public struct NetworkV4: Network {
         ipv4 = v4
         self.maskV4 = IPv4(raw: maskV4)
         self.maskInt = maskInt
+
+        if !contains(ipv4) {
+            return nil
+        }
+    }
+
+    public init?(ipv4: IPv4, maskInt: Int) {
+        let maskV4 = parseMask(maskInt, isv4: true)
+        guard let maskV4 else {
+            return nil
+        }
+        self.ipv4 = ipv4
+        self.maskInt = maskInt
+        self.maskV4 = IPv4(raw: maskV4)
+
+        if !contains(ipv4) {
+            return nil
+        }
     }
 
     public func contains(_ ip: (any IP)?) -> Bool {
@@ -68,7 +94,7 @@ public struct NetworkV6: Network {
         guard let maskInt else {
             return nil
         }
-        let maskV6 = parseMask(maskInt, isv4: true)
+        let maskV6 = parseMask(maskInt, isv4: false)
         guard let maskV6 else {
             return nil
         }
@@ -79,10 +105,27 @@ public struct NetworkV6: Network {
         ipv6 = v6
         self.maskV6 = IPv6(raw: maskV6)
         self.maskInt = maskInt
+
+        if !contains(ipv6) {
+            return nil
+        }
+    }
+
+    public init?(ipv6: IPv6, maskInt: Int) {
+        let maskV6 = parseMask(maskInt, isv4: false)
+        guard let maskV6 else {
+            return nil
+        }
+        self.ipv6 = ipv6
+        self.maskInt = maskInt
+        self.maskV6 = IPv6(raw: maskV6)
+
+        if !contains(ipv6) {
+            return nil
+        }
     }
 
     public func contains(_ ip: (any IP)?) -> Bool {
-        print("!!!! \(self) contains \(String(describing: ip))")
         guard let v6 = ip as? IPv6 else {
             return false
         }
@@ -109,7 +152,7 @@ func parseMask(_ mask: Int, isv4: Bool) -> [UInt8]? {
     if mask > 128 { // mask should not be greater than 128
         return nil
     }
-    if mask > 32, isv4 {
+    if mask > 32, isv4 { // v4 should not be greater than 32
         return nil
     }
     var result: [UInt8]

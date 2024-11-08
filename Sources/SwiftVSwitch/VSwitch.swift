@@ -6,9 +6,9 @@ import VProxyCommon
 public class VSwitch {
     public let loop: SelectorEventLoop
     private let params: VSwitchParams
-    private var ifaces = [IfaceStore]()
-    private var bridges = [UInt32: Bridge]()
-    private var netstacks = [UInt32: NetStack]()
+    private var ifaces = [String: IfaceEx]()
+    public private(set) var bridges = [UInt32: Bridge]()
+    public private(set) var netstacks = [UInt32: NetStack]()
     private var forEachPollEvent: ForEachPollEvent?
 
     public init(loop: SelectorEventLoop, params: VSwitchParams) {
@@ -16,6 +16,9 @@ public class VSwitch {
         self.params = params
 
         params.ethsw.initAllNodes(NodeInit(
+            sw: VSwitchHelper(sw: self)
+        ))
+        params.netstack.initAllNodes(NodeInit(
             sw: VSwitchHelper(sw: self)
         ))
     }
@@ -34,11 +37,11 @@ public class VSwitch {
     private func handlePackets() {
         var hasPackets = handlePacketsOneRound()
         var round = 1
-        while hasPackets && round < 4096 { // maximum run 4096 times, to ensure other loop events handled
+        while hasPackets, round < 4096 { // maximum run 4096 times, to ensure other loop events handled
             round += 1
             hasPackets = handlePacketsOneRound()
         }
-        for i in ifaces {
+        for i in ifaces.values {
             i.iface.completeTx()
         }
     }
@@ -47,81 +50,68 @@ public class VSwitch {
 
     private func handlePacketsOneRound() -> Bool {
         var offset = 0
-        for s in ifaces {
+        for ex in ifaces.values {
             let oldOffset = offset
-            s.iface.dequeue(&packets, off: &offset)
+            ex.iface.dequeue(&packets, off: &offset)
             for i in oldOffset ..< offset {
                 let p = packets[i]
-                p.inputIface = s.iface
-                if s.toBridge > 0 {
-                    if let br = bridges[s.toBridge] {
-                        p.bridge = br
-                        p.toBridge = s.toBridge
-                    }
-                } else if s.toNetstack > 0 {
-                    if let ns = netstacks[s.toNetstack] {
-                        p.netstack = ns
-                        p.toNetstack = s.toNetstack
-                    }
+                assert(Logger.lowLevelDebug("received packet: \(p)"))
+
+                p.inputIface = ex
+                p.csumState = ex.iface.meta.offload.rxcsum
+
+                if ex.toBridge > 0 {
+                    _ = params.ethsw.devInput.enqueue(p)
+                } else if ex.toNetstack > 0 {
+                    _ = params.netstack.devInput.enqueue(p)
+                } else {
+                    Logger.shouldNotHappen("\(p) not toBridge nor toNetstack")
                 }
-                p.csumState = s.iface.offload.rxcsum
             }
             if offset >= packets.count {
                 break
             }
         }
-        for i in 0 ..< offset {
-            let pkb = packets[i]
-            assert(Logger.lowLevelDebug("received packet: \(pkb)"))
-            if pkb.toBridge == 0 && pkb.toNetstack == 0 {
-                Logger.shouldNotHappen("not toBridge and not toNetstack")
-                continue
-            }
-            _ = params.ethsw.devInput.enqueue(pkb)
-        }
 
-        var sched = Scheduler(params.ethsw.drop, params.ethsw.devInput)
+        var sched = Scheduler(mgr: params.ethsw, params.ethsw.devInput)
+        while sched.schedule() {}
+        sched = Scheduler(mgr: params.netstack, params.netstack.devInput)
         while sched.schedule() {}
 
         return offset > 0
     }
 
     public func register(iface: any Iface, bridge: UInt32) throws(IOException) {
-        if iface.property.layer != .ETHER {
+        if iface.meta.property.layer != .ETHER {
             throw IOException("\(iface.name) is not ethernet iface")
         }
-        if ifaces.contains(where: { i in i.iface.handle() == iface.handle() }) {
+        if ifaces.values.contains(where: { i in i.iface.handle() == iface.handle() }) {
             throw IOException("already registered")
         }
         try iface.initialize(IfaceInit(
             loop: loop
         ))
         loop.runOnLoop {
-            self.ifaces.append(IfaceStore(iface, toBridge: bridge))
+            self.ifaces[iface.name] = IfaceEx(iface, toBridge: bridge)
         }
     }
 
     public func register(iface: any Iface, netstack: UInt32) throws(IOException) {
-        if ifaces.contains(where: { i in i.iface.handle() == iface.handle() }) {
+        if ifaces.values.contains(where: { i in i.iface.handle() == iface.handle() }) {
             throw IOException("already registered")
         }
         try iface.initialize(IfaceInit(
             loop: loop
         ))
         loop.runOnLoop {
-            self.ifaces.append(IfaceStore(iface, toNetstack: netstack))
+            self.ifaces[iface.name] = IfaceEx(iface, toNetstack: netstack)
         }
     }
 
     public func remove(name: String) {
         loop.runOnLoop {
-            for (idx, store) in self.ifaces.enumerated() {
-                if store.iface.name == name {
-                    self.bridges.values.forEach { b in b.remove(iface: store.iface) }
-                    self.ifaces.remove(at: idx)
-                    store.iface.close()
-                    break
-                }
+            if let ex = self.ifaces.removeValue(forKey: name) {
+                ex.iface.close()
             }
         }
     }
@@ -166,6 +156,74 @@ public class VSwitch {
         }
     }
 
+    private func getDevAndNetstack(dev: String) -> (IfaceEx, NetStack)? {
+        guard let iface = ifaces[dev] else {
+            Logger.warn(.INVALID_INPUT_DATA, "dev \(dev) not found")
+            return nil
+        }
+        if iface.toNetstack == 0 {
+            Logger.warn(.INVALID_INPUT_DATA, "dev \(dev) is not targeting netstack")
+            return nil
+        }
+        guard let ns = netstacks[iface.toNetstack] else {
+            Logger.warn(.INVALID_INPUT_DATA, "netstack \(iface.toNetstack) for \(dev) not found")
+            return nil
+        }
+        return (iface, ns)
+    }
+
+    public func addAddress(_ ip: (any IP)?, dev: String) {
+        guard let ip else {
+            return
+        }
+        loop.runOnLoop {
+            guard let (iface, ns) = self.getDevAndNetstack(dev: dev) else {
+                return
+            }
+            ns.addIp(ip, dev: iface)
+        }
+    }
+
+    public func delAddress(_ ip: (any IP)?, dev: String) {
+        guard let ip else {
+            return
+        }
+        loop.runOnLoop {
+            guard let (iface, ns) = self.getDevAndNetstack(dev: dev) else {
+                return
+            }
+            ns.removeIp(ip, dev: iface)
+        }
+    }
+
+    public func addRoute(_ rule: any Network, dev: String, src: any IP) {
+        if (rule is NetworkV4 && src is IPv6) || (rule is NetworkV6 && src is IPv4) {
+            Logger.warn(.INVALID_INPUT_DATA, "AF of \(rule) and \(src) mismatch")
+            return
+        }
+        loop.runOnLoop {
+            guard let (iface, ns) = self.getDevAndNetstack(dev: dev) else {
+                return
+            }
+            ns.routeTable.addRule(RouteTable.RouteRule(rule: rule, dev: iface, src: src))
+        }
+    }
+
+    // TODO: another route format
+
+    public func delRoute(_ rule: any Network, netstackId: UInt32) {
+        if netstackId == 0 {
+            return
+        }
+        loop.runOnLoop {
+            guard let ns = self.netstacks[netstackId] else {
+                Logger.warn(.INVALID_INPUT_DATA, "netstack \(netstackId) not found")
+                return
+            }
+            ns.routeTable.delRule(rule)
+        }
+    }
+
     public struct VSwitchHelper {
         private var sw: VSwitch
 
@@ -175,12 +233,12 @@ public class VSwitch {
 
         public var bridges: [UInt32: Bridge] { sw.bridges }
         public var netstacks: [UInt32: NetStack] { sw.netstacks }
-        public func foreachIface(in br: Bridge, _ f: (any Iface) -> Void) {
-            for s in sw.ifaces {
-                if sw.bridges[s.toBridge] !== br {
+        public func foreachIface(in br: Bridge, _ f: (IfaceEx) -> Void) {
+            for ex in sw.ifaces.values {
+                if sw.bridges[ex.toBridge] !== br {
                     continue
                 }
-                f(s.iface)
+                f(ex)
             }
         }
     }
@@ -190,34 +248,26 @@ public struct IfaceInit {
     public let loop: SelectorEventLoop
 }
 
-struct IfaceStore {
-    let iface: any Iface
-    var toBridge: UInt32
-    var toNetstack: UInt32
-
-    init(_ iface: any Iface, toBridge: UInt32) {
-        self.iface = iface
-        self.toBridge = toBridge
-        toNetstack = 0
-    }
-
-    init(_ iface: any Iface, toNetstack: UInt32) {
-        self.iface = iface
-        toBridge = 0
-        self.toNetstack = toNetstack
-    }
-}
-
 public struct VSwitchParams {
     public var macTableTimeoutMillis: Int
+    public var arpTableTimeoutMillis: Int
+    public var arpRefreshCacheMillis: Int
+
     public var ethsw: NodeManager
+    public var netstack: NodeManager
 
     public init(
         macTableTimeoutMillis: Int = 300 * 1000,
-        ethsw: NodeManager
+        arpTableTimeoutMillis: Int = 4 * 3600 * 1000,
+        arpRefreshCacheMillis: Int = 60 * 1000,
+        ethsw: NodeManager,
+        netstack: NodeManager
     ) {
         self.macTableTimeoutMillis = macTableTimeoutMillis
+        self.arpTableTimeoutMillis = arpTableTimeoutMillis
+        self.arpRefreshCacheMillis = arpRefreshCacheMillis
         self.ethsw = ethsw
+        self.netstack = netstack
     }
 }
 

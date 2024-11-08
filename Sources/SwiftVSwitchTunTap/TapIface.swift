@@ -37,11 +37,9 @@ public class TapTunFD: PosixFD {
 public class TapIface: Iface, Hashable {
     private let fd: TapTunFD
     public let name: String
-    public var statistics = IfaceStatistics()
-    public var offload: IfaceOffload
     private var ifaceInit_: IfaceInit? = nil
     public var ifaceInit: IfaceInit { ifaceInit_! }
-    public let property = IfaceProperty(layer: .ETHER)
+    public var meta: IfaceMetadata
 
     public static func open(dev: String) throws -> TapIface {
         return try TapIface(fd: TapTunFD.openTap(dev: dev))
@@ -50,9 +48,13 @@ public class TapIface: Iface, Hashable {
     private init(fd: TapTunFD) {
         self.fd = fd
         name = "tap:\(fd.dev)"
-        offload = IfaceOffload(
-            rxcsum: .UNNECESSARY,
-            txcsum: .NONE
+        meta = IfaceMetadata(
+            property: IfaceProperty(layer: .ETHER),
+            offload: IfaceOffload(
+                rxcsum: .UNNECESSARY,
+                txcsum: .NONE
+            ),
+            initialMac: nil
         )
     }
 

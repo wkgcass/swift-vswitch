@@ -7,3 +7,8 @@
 	path = submodules/vproxy-checksum
 	url = https://github.com/vproxy-tools/checksum
 	branch = master
+
+[submodule "submodules/poptrie"]
+	path = submodules/poptrie
+	url = https://github.com/vproxy-tools/poptrie
+	branch = swift

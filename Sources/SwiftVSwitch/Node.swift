@@ -7,6 +7,7 @@ open class Node: CustomStringConvertible, Equatable, Hashable {
     public var packets: [UnownedPacketBuffer] = Arrays.newArray(capacity: 2048)
     public var offset = 0
     public var drop = NodeRef("drop")
+    public var stolen = NodeRef("stolen")
     private var nodeInit_: NodeInit? = nil
     public var nodeInit: NodeInit { nodeInit_! }
 
@@ -15,7 +16,8 @@ open class Node: CustomStringConvertible, Equatable, Hashable {
     }
 
     open func initGraph(mgr: NodeManager) {
-        mgr.initNode(&drop)
+        mgr.initRef(&drop)
+        mgr.initRef(&stolen)
     }
 
     func initNode(nodeInit: NodeInit) {
@@ -27,7 +29,11 @@ open class Node: CustomStringConvertible, Equatable, Hashable {
             return
         }
         for i in 0 ..< offset {
-            schedule(packets[i].pkb, &sched)
+            if let owned = packets[i].owned {
+                schedule(owned, &sched)
+            } else {
+                schedule(packets[i].pkb, &sched)
+            }
         }
         offset = 0
     }
@@ -44,13 +50,18 @@ open class Node: CustomStringConvertible, Equatable, Hashable {
             }
             self.packets = packets
         }
-        packets[offset].pkb = pkb
+        if pkb.useOwned {
+            packets[offset].owned = pkb
+        } else {
+            packets[offset].pkb = pkb
+            packets[offset].owned = nil
+        }
         offset += 1
         return true
     }
 
     public var description: String {
-        return "Node(\(name)"
+        return "Node(\(name))"
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -64,14 +75,19 @@ open class Node: CustomStringConvertible, Equatable, Hashable {
 
 public struct UnownedPacketBuffer {
     public unowned var pkb: PacketBuffer
+    public var owned: PacketBuffer?
 }
 
 public struct Scheduler {
-    private var drop: DropNode
+    private unowned var drop: DropNode
+    private unowned var stolen: StolenNode
+    private unowned var devOutput: DevOutput
     private var nextNodes = Set<Node>()
 
-    init(_ drop: DropNode, _ initialNodes: Node...) {
-        self.drop = drop
+    init(mgr: NodeManager, _ initialNodes: Node...) {
+        drop = mgr.drop
+        stolen = mgr.stolen
+        devOutput = mgr.devOutput
         for n in initialNodes {
             nextNodes.insert(n)
         }
@@ -79,9 +95,15 @@ public struct Scheduler {
 
     public mutating func schedule(_ pkb: PacketBuffer, to: NodeRef) {
         let node = to.node
+        if node == devOutput || node == drop || node == stolen {
+            _ = node.enqueue(pkb)
+            return
+        }
         if node.enqueue(pkb) {
+            assert(Logger.lowLevelDebug("schedule \(Unmanaged.passUnretained(pkb).toOpaque()) to \(node.name) succeeded"))
             nextNodes.insert(node)
-        } else if node != drop {
+        } else {
+            assert(Logger.lowLevelDebug("schedule \(Unmanaged.passUnretained(pkb).toOpaque()) to \(node.name) failed, drop now"))
             _ = drop.enqueue(pkb)
         }
     }
@@ -102,7 +124,12 @@ public struct Scheduler {
 public struct NodeRef {
     public let name: String
     private unowned var node_: Node?
-    var node: Node { node_! }
+    var node: Node {
+        if node_ == nil {
+            assert(Logger.lowLevelDebug("node \(name) is nil !!!"))
+        }
+        return node_!
+    }
 
     public init(_ name: String) {
         self.name = name
@@ -116,12 +143,14 @@ public struct NodeRef {
 open class NodeManager {
     var storage = [String: Node]()
     var drop = DropNode()
+    var stolen = StolenNode()
     var devOutput = DevOutput()
     var devInput: DevInput
 
     public init(_ devInput: DevInput) {
         self.devInput = devInput
         addNode(drop)
+        addNode(stolen)
         addNode(devOutput)
         addNode(devInput)
     }
@@ -130,7 +159,7 @@ open class NodeManager {
         storage[node.name] = node
     }
 
-    public func initNode(_ ref: inout NodeRef) {
+    public func initRef(_ ref: inout NodeRef) {
         let node = storage[ref.name]
         if node == nil {
             Logger.error(.IMPROPER_USE, "unable to find node with name \(ref.name), exiting ...")
@@ -158,16 +187,17 @@ open class DevInput: Node {
     }
 
     override public func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
-        // statistics
-        if let iface = pkb.inputIface {
-            iface.statistics.rxbytes += UInt64(pkb.pktlen)
-            iface.statistics.rxpkts += 1
+        guard let iface = pkb.inputIface else {
+            assert(Logger.lowLevelDebug("inputIface not present in pkb"))
+            return sched.schedule(pkb, to: drop)
         }
 
+        // statistics
+        iface.meta.statistics.rxbytes += UInt64(pkb.pktlen)
+        iface.meta.statistics.rxpkts += 1
+
         if csumDrop(pkb) {
-            if let iface = pkb.inputIface {
-                iface.statistics.rxerrcsum += 1
-            }
+            iface.meta.statistics.rxerrcsum += 1
             return sched.schedule(pkb, to: drop)
         }
         return schedule0(pkb, &sched)
@@ -267,10 +297,21 @@ class DropNode: Node {
         super.init(name: "drop")
     }
 
-    override public func enqueue(_: PacketBuffer) -> Bool {
+    override public func enqueue(_ pkb: PacketBuffer) -> Bool {
         // do nothing, just drop the packet
-        assert(Logger.lowLevelDebug("drop packet"))
+        assert(Logger.lowLevelDebug("packet \(Unmanaged.passUnretained(pkb).toOpaque()) dropped"))
         return false
+    }
+}
+
+class StolenNode: Node {
+    init() {
+        super.init(name: "stolen")
+    }
+
+    override public func enqueue(_ pkb: PacketBuffer) -> Bool {
+        assert(Logger.lowLevelDebug("packet \(Unmanaged.passUnretained(pkb).toOpaque()) stolen"))
+        return true
     }
 }
 
@@ -287,17 +328,16 @@ class DevOutput: Node {
 
         // clear switch and iface related fields
         pkb.bridge = nil
+        pkb.netstack = nil
         pkb.inputIface = nil
-        pkb.outputIface = nil
-        pkb.toBridge = 0
-        pkb.toNetstack = 0
+        // keep outputIface, the iface might need to use extra info
 
         // csum
-        if iface.offload.txcsum == .COMPLETE {
+        if iface.meta.offload.txcsum == .COMPLETE {
             // can be offloaded
         } else if pkb.csumState == .COMPLETE {
             // already calculated
-        } else if pkb.csumState == .UNNECESSARY, iface.offload.txcsum == .UNNECESSARY {
+        } else if pkb.csumState == .UNNECESSARY, iface.meta.offload.txcsum == .UNNECESSARY {
             // no need to calculate
         } else {
             // do re-calculate
@@ -311,11 +351,11 @@ class DevOutput: Node {
         // statistics
         if !ok {
             assert(Logger.lowLevelDebug("failed to enqueue to \(iface.name)"))
-            iface.statistics.txerr += 1
+            iface.meta.statistics.txerr += 1
             return false
         }
-        iface.statistics.txbytes += UInt64(pkb.pktlen)
-        iface.statistics.txpkts += 1
+        iface.meta.statistics.txbytes += UInt64(pkb.pktlen)
+        iface.meta.statistics.txpkts += 1
         return true
     }
 }

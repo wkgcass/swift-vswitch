@@ -9,13 +9,11 @@ import VProxyCommon
 public class SimpleHostMimicIface: VirtualIface {
     private var name_: String
     override public var name: String { "simple-host-mimic:\(name_)" }
-    public private(set) var mac: MacAddress
     public private(set) var ip4 = Set<IPv4>()
     public private(set) var ip6 = Set<IPv6>()
 
-    public init(name: String, mac: MacAddress) {
+    public init(name: String) {
         name_ = name
-        self.mac = mac
         super.init()
     }
 
@@ -40,8 +38,9 @@ public class SimpleHostMimicIface: VirtualIface {
         guard let ether: UnsafeMutablePointer<swvs_ethhdr> = pkb.getAs(pkb.raw) else {
             return false
         }
+        let ifMac = pkb.outputIface!.mac
         let dstMac = MacAddress(raw: &ether.pointee.dst)
-        if dstMac != mac && dstMac.isUnicast() {
+        if dstMac != pkb.outputIface!.mac && dstMac.isUnicast() {
             assert(Logger.lowLevelDebug("the packet is not for \(name)"))
             return false
         }
@@ -66,11 +65,11 @@ public class SimpleHostMimicIface: VirtualIface {
 
             let arp: UnsafeMutablePointer<swvs_arp> = Convert.ptr2mutUnsafe(arpRaw)
 
-            mac.copyInto(&ether.pointee.src)
+            ifMac.copyInto(&ether.pointee.src)
             pkb.srcmac!.copyInto(&ether.pointee.dst)
 
             arp.pointee.be_arp_opcode = BE_ARP_PROTOCOL_OPCODE_RESP
-            mac.copyInto(&arp.pointee.arp_sha)
+            ifMac.copyInto(&arp.pointee.arp_sha)
             ip.copyInto(&arp.pointee.arp_sip)
             pkb.srcmac!.copyInto(&arp.pointee.arp_tha)
             pkb.ipSrc!.copyInto(&arp.pointee.arp_tip)
@@ -110,7 +109,7 @@ public class SimpleHostMimicIface: VirtualIface {
             ping.pointee.icmp.type = ICMP_PROTOCOL_TYPE_ECHO_RESP
 
             pkb.srcmac!.copyInto(&ether.pointee.dst)
-            mac.copyInto(&ether.pointee.src)
+            ifMac.copyInto(&ether.pointee.src)
 
             pkb.calcPacketInfo()
         } else if pkb.ethertype == ETHER_TYPE_IPv6 {
@@ -147,7 +146,7 @@ public class SimpleHostMimicIface: VirtualIface {
                     assert(Logger.lowLevelDebug("target ip \(target) is not owned by \(name)"))
                     return false
                 }
-                var opt: UnsafeMutablePointer<swvs_icmp_ndp_opt>? = Convert.mut2mutUnsafe(ndp.advanced(by: 1))
+                var opt: UnsafeMutablePointer<swvs_icmp_ndp_opt>? = pkb.getAs(ndp.advanced(by: 1))
                 var slla: UnsafeMutablePointer<swvs_icmp_ndp_opt_link_layer_addr>? = nil
                 while true {
                     guard let opt2 = opt else {
@@ -187,22 +186,23 @@ public class SimpleHostMimicIface: VirtualIface {
 
                 assert(Logger.lowLevelDebug("begin to handle the icmpv6 ndp-ns ..."))
 
-                mac.copyInto(&ether.pointee.src)
+                ifMac.copyInto(&ether.pointee.src)
                 pkb.srcmac!.copyInto(&ether.pointee.dst)
 
                 let ip: UnsafeMutablePointer<swvs_ipv6hdr> = Convert.ptr2mutUnsafe(ipraw)
                 pkb.ipSrc!.copyInto(&ip.pointee.dst)
                 target.copyInto(&ip.pointee.src)
 
-                let icmpRes: UnsafeMutablePointer<swvs_compose_icmpv6_ns_llaopt> = Convert.ptr2mutUnsafe(icmp)
+                let icmpRes: UnsafeMutablePointer<swvs_compose_icmpv6_na_tlla> = Convert.ptr2mutUnsafe(icmp)
                 icmpRes.pointee.icmp.type = ICMPv6_PROTOCOL_TYPE_Neighbor_Advertisement
+                icmpRes.pointee.icmp.code = 0
                 icmpRes.pointee.opt.type = ICMPv6_OPTION_TYPE_Target_Link_Layer_Address
                 icmpRes.pointee.opt.len = 1 // 1 * 8 = 8
                 icmpRes.pointee.flags = 0b0110_0000
                 target.copyInto(&icmpRes.pointee.target)
-                mac.copyInto(&icmpRes.pointee.opt.addr)
+                ifMac.copyInto(&icmpRes.pointee.opt.addr)
 
-                let lenDelta = pkb.lengthFromUpperToEnd - MemoryLayout<swvs_compose_icmpv6_ns_llaopt>.stride
+                let lenDelta = pkb.lengthFromUpperToEnd - MemoryLayout<swvs_compose_icmpv6_na_tlla>.stride
                 if lenDelta == 0 {
                     assert(Logger.lowLevelDebug("no need to shrink packet total length"))
                 } else {
@@ -227,7 +227,7 @@ public class SimpleHostMimicIface: VirtualIface {
                 pkb.ipDst!.copyInto(&ip.pointee.src)
 
                 pkb.srcmac!.copyInto(&ether.pointee.dst)
-                mac.copyInto(&ether.pointee.src)
+                ifMac.copyInto(&ether.pointee.src)
             } else {
                 assert(Logger.lowLevelDebug("not ndp-ns nor ping-req"))
                 return false

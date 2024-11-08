@@ -104,6 +104,11 @@ struct swvs_udphdr {
 
 // =========== composed ===========
 
+struct swvs_compose_eth_arp {
+    struct swvs_ethhdr ethhdr;
+    struct swvs_arp    arp;
+} __attribute__((packed));
+
 struct swvs_compose_icmp_echoreq {
     struct swvs_icmp_hdr icmp;
     uint16_t          be_id;
@@ -117,11 +122,20 @@ struct swvs_compose_icmpv6_ns {
     uint8_t              target[16];
 } __attribute__((packed));
 
-struct swvs_compose_icmpv6_ns_llaopt {
+struct swvs_compose_icmpv6_na_tlla {
     struct swvs_icmp_hdr icmp;
     uint8_t              flags;
     uint8_t              reserved0;
     uint16_t             reserved1;
+    uint8_t              target[16];
+    struct swvs_icmp_ndp_opt_link_layer_addr opt;
+} __attribute__((packed));
+
+struct swvs_compose_eth_ip6_icmp6_ns_slla {
+    struct swvs_ethhdr   ethhdr;
+    struct swvs_ipv6hdr  v6;
+    struct swvs_icmp_hdr icmp;
+    uint32_t             reserved;
     uint8_t              target[16];
     struct swvs_icmp_ndp_opt_link_layer_addr opt;
 } __attribute__((packed));
