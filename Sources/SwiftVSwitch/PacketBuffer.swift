@@ -314,12 +314,12 @@ public class PacketBuffer: CustomStringConvertible {
     public init(_ other: PacketBuffer) {
         useOwned = true
 
+        bridge = other.bridge
+        netstack = other.netstack
+
         inputIface = other.inputIface
         outputIface = other.outputIface
         outputRouteRule = other.outputRouteRule
-
-        bridge = other.bridge
-        netstack = other.netstack
 
         if let otherPacketArray = other.packetArray {
             packetArray = Arrays.newArray(capacity: otherPacketArray.capacity, uninitialized: true)
@@ -329,7 +329,7 @@ public class PacketBuffer: CustomStringConvertible {
         } else {
             packetArray = Arrays.newArray(capacity: other.headroom + other.pktlen + other.tailroom, uninitialized: true)
             raw = Convert.mutraw2ptr(&packetArray!).advanced(by: other.headroom)
-            memcpy(Convert.ptr2mutraw(raw),
+            memcpy(&packetArray!,
                    other.raw.advanced(by: -other.headroom),
                    other.headroom + other.pktlen + other.tailroom)
         }
@@ -351,6 +351,11 @@ public class PacketBuffer: CustomStringConvertible {
         srcPort_ = other.srcPort_
         dstPort_ = other.dstPort_
         appLen_ = other.appLen_
+        if let otherEther = other.ether_ {
+            ether_ = raw.advanced(by: otherEther - other.raw)
+        } else {
+            ether_ = nil
+        }
         if let otherIp = other.ip_ {
             ip_ = raw.advanced(by: otherIp - other.raw)
         } else {
