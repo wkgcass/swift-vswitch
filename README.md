@@ -14,7 +14,7 @@ Start the sample program with `tap` device and connect the `tap` device to a vir
 swift run -c release sample-taptunping \
     --type=tap \
     --dev-name=tap0 \
-    --cidr=192.168.111.2/24,fd00::2/120 \
+    --ipmask=192.168.111.2/24,fd00::2/120 \
     --net-type=stack
 ```
 
@@ -25,7 +25,7 @@ Also a mimic host will also be connected to the virtual switch.
 swift run -c release sample-taptunping \
     --type=tap \
     --dev-name=tap0 \
-    --cidr=192.168.111.2/24,fd00::2/120 \
+    --ipmask=192.168.111.2/24,fd00::2/120 \
     --net-type=mimic
 ```
 
@@ -52,7 +52,7 @@ Start the sample program with `tun` device and connect it to a virtual net stack
 swift run -c release sample-taptunping \
     --type=tun \
     --dev-name=tun0 \
-    --cidr=192.168.111.2/24,fd00::2/120 \
+    --ipmask=192.168.111.2/24,fd00::2/120 \
     --net-type=stack
 ```
 
@@ -92,7 +92,7 @@ Start the sample program.
 swift run -c release sample-taptunping \
     --type tun \
     --dev-name utun11 \
-    --cidr=192.168.111.2/24,fd00::2/120 \
+    --ipmask=192.168.111.2/24,fd00::2/120 \
     --net-type=stack
 ```
 

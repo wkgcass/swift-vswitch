@@ -85,15 +85,15 @@ struct TestIP {
         #expect(linkLocal.contains(GetIP(from: "fe80::1074:aeff:fea3:eaa2")))
     }
 
-    @Test func cidr() {
-        let cidrV4 = GetCIDR(from: "192.168.3.2/24")
-        #expect(cidrV4 != nil)
-        #expect(cidrV4!.description == "192.168.3.2/24")
-        #expect(cidrV4!.network.description == "192.168.3.0/24")
+    @Test func ipmask() {
+        let ipmaskV4 = GetIPMask(from: "192.168.3.2/24")
+        #expect(ipmaskV4 != nil)
+        #expect(ipmaskV4!.description == "192.168.3.2/24")
+        #expect(ipmaskV4!.network.description == "192.168.3.0/24")
 
-        let cidrV6 = GetCIDR(from: "fd00::a:3:2/112")
-        #expect(cidrV6 != nil)
-        #expect(cidrV6!.description == "fd00::a:3:2/112")
-        #expect(cidrV6!.network.description == "fd00::a:3:0/112")
+        let ipmaskV6 = GetIPMask(from: "fd00::a:3:2/112")
+        #expect(ipmaskV6 != nil)
+        #expect(ipmaskV6!.description == "fd00::a:3:2/112")
+        #expect(ipmaskV6!.network.description == "fd00::a:3:0/112")
     }
 }

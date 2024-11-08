@@ -1,25 +1,25 @@
-public protocol CIDR: CustomStringConvertible, Hashable {
+public protocol IPMask: CustomStringConvertible, Hashable {
     var ip: any IP { get }
     var mask: any IP { get }
     var maskInt: Int { get }
     var network: any Network { get }
 }
 
-public extension CIDR {
+public extension IPMask {
     var description: String {
         return "\(ip)/\(maskInt)"
     }
 }
 
-public func GetCIDR(from: String) -> (any CIDR)? {
-    let v4 = CIDRv4(from: from)
+public func GetIPMask(from: String) -> (any IPMask)? {
+    let v4 = IPMaskv4(from: from)
     if v4 != nil {
         return v4
     }
-    return CIDRv6(from: from)
+    return IPMaskv6(from: from)
 }
 
-public struct CIDRv4: CIDR {
+public struct IPMaskv4: IPMask {
     public let ipv4: IPv4
     public var ip: any IP { ipv4 }
     public let maskV4: IPv4
@@ -58,7 +58,7 @@ public struct CIDRv4: CIDR {
     }
 }
 
-public struct CIDRv6: CIDR {
+public struct IPMaskv6: IPMask {
     public let ipv6: IPv6
     public var ip: any IP { ipv6 }
     public let maskV6: IPv6
