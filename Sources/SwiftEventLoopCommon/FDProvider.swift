@@ -55,7 +55,7 @@ public let ThreadMemPoolCount = 8192
 public protocol Thread: AnyObject {
     func start()
     func join()
-    
+
     func setLoop(shouldBeCalledFromSelectorEventLoop loop: SelectorEventLoop?)
     func getLoop() -> SelectorEventLoop?
     var memPool: FixedSizeFixedCountSingleThreadMemPool { get }

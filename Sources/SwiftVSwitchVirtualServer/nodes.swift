@@ -1,6 +1,6 @@
 import SwiftVSwitch
-import SwiftVSwitchVirtualServerBase
 import SwiftVSwitchCHelper
+import SwiftVSwitchVirtualServerBase
 import VProxyCommon
 
 public func addIPVSNodes(_ mgr: NodeManager) {

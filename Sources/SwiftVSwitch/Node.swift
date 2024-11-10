@@ -448,7 +448,8 @@ open class UserInput: Node {
     public init() {
         super.init(name: "user-input")
     }
-    open override func enqueue(_ pkb: PacketBuffer) -> Bool {
+
+    override open func enqueue(_: PacketBuffer) -> Bool {
         return false
     }
 }

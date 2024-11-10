@@ -45,7 +45,7 @@ struct VirtualServerSample: ParsableCommand {
         let destIpPort = GetIPPort(from: dest)!
 
         var opts = SelectorOptions()
-        if let coreAffinity = self.coreAffinity {
+        if let coreAffinity {
             opts.coreAffinity = coreAffinity
         }
         let loop = try SelectorEventLoop.open(opts: opts)
@@ -54,7 +54,8 @@ struct VirtualServerSample: ParsableCommand {
 
         let sw = VSwitch(loop: loop, params: VSwitchParams(
             ethsw: DummyNodeManager(),
-            netstack: NetstackNodeManager()))
+            netstack: NetstackNodeManager()
+        ))
         sw.start()
         sw.ensureNetstack(id: 1)
         loop.runOnLoop {

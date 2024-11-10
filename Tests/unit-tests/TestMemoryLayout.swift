@@ -1,5 +1,5 @@
-import VProxyCommon
 import Testing
+import VProxyCommon
 
 class TestMemoryLayout {
     @Test func pktTuple() {

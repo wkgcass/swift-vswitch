@@ -1,5 +1,5 @@
-import VProxyCommon
 import SwiftEventLoopCommon
+import VProxyCommon
 
 public class Conntrack {
     var conns = [PktTuple: Connection]()
@@ -22,7 +22,7 @@ public class Conntrack {
 
 public class Connection {
     public let ct: Conntrack
-    public var peer: Connection? = nil
+    public var peer: Connection?
     public let isBeforeNat: Bool
     public private(set) var tup: PktTuple
     public var state: ConnState = .NONE
@@ -41,10 +41,10 @@ public class Connection {
     }
 
     public func resetTimer(resetPeer: Bool = true) {
-        if resetPeer, let peer = self.peer {
+        if resetPeer, let peer {
             peer.resetTimer(resetPeer: false)
         }
-        if let timer = timer {
+        if let timer {
             timer.setTimeout(millis: getTimeoutMillis())
             timer.resetTimer()
             return
@@ -57,7 +57,7 @@ public class Connection {
         switch state {
         case .TCP_ESTABLISHED: return 900_000 // TODO: custom config
         case .UDP_ESTABLISHED: return 900_000
-        default: return 5_000
+        default: return 5000
         }
     }
 
@@ -67,7 +67,7 @@ public class Connection {
         }
         destroyed = true
 
-        if let timer = timer {
+        if let timer {
             timer.cancel()
         }
         timer = nil
@@ -75,7 +75,7 @@ public class Connection {
         if touchConntrack {
             ct.conns.removeValue(forKey: tup)
         }
-        if touchPeer, let peer = self.peer {
+        if touchPeer, let peer {
             peer.destroy(touchConntrack: touchConntrack, touchPeer: false)
         }
     }
@@ -113,7 +113,7 @@ public enum ConnState {
 public struct FastOutput {
     public var enabled: Bool = false
     public var isValid: Bool = false
-    public var outdev: IfaceEx? = nil
-    public var outSrcMac: MacAddress = MacAddress.ZERO
-    public var outDstMac: MacAddress = MacAddress.ZERO
+    public var outdev: IfaceEx?
+    public var outSrcMac: MacAddress = .ZERO
+    public var outDstMac: MacAddress = .ZERO
 }

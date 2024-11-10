@@ -1,6 +1,6 @@
-import VProxyCommon
 import SwiftVSwitch
 import SwiftVSwitchVirtualServerBase
+import VProxyCommon
 
 public extension Service {
     func findFreeLocalIPPort(_ dest: Dest, ct: Conntrack) -> PktTuple? {
@@ -14,7 +14,7 @@ public extension Service {
 
 public extension IPPool {
     func findFreeIPPort(_ dest: Dest, proto: UInt8, ct: Conntrack) -> PktTuple? {
-        let ipList = self.ips
+        let ipList = ips
         if ipList.count == 0 {
             assert(Logger.lowLevelDebug("no localip available"))
             return nil

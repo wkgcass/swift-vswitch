@@ -19,16 +19,16 @@ public struct PktTuple: Hashable {
     {
         assert((srcIp is IPv4 && dstIp is IPv4) || (srcIp is IPv6 && dstIp is IPv6))
         self.proto = proto
-        self.ud8 = 0
+        ud8 = 0
         self.srcPort = srcPort
         self.dstPort = dstPort
-        self.ud16x1 = 0
+        ud16x1 = 0
         self.srcIp = srcIp
         self.dstIp = dstIp
-        self.ud64 = 0
-        self.ud32x1 = 0
-        self.ud16x2 = 0
-        self.ud16x3 = 0
+        ud64 = 0
+        ud32x1 = 0
+        ud16x2 = 0
+        ud16x3 = 0
     }
 
     public var isIPv6: Bool {
