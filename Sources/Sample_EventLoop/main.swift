@@ -66,8 +66,8 @@ struct EventLoopSample: ParsableCommand {
 }
 
 class AcceptHandler: TcpHandler {
-    private let target: IPPort
-    init(_ target: IPPort) {
+    private let target: any IPPort
+    init(_ target: any IPPort) {
         self.target = target
     }
 

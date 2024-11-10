@@ -1,10 +1,16 @@
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
 import SwiftVSwitch
 import SwiftVSwitchCHelper
+import SwiftVSwitchVirtualServer
 import VProxyCommon
 
-public class NetstackNodeManager: NodeManager {
+public class NetstackNodeManager: NetStackNodeManager {
     public init() {
-        super.init(DevInput())
+        super.init(devInput: DevInput(), userInput: UserInput())
         addNode(EthernetInput())
         addNode(ArpInput())
         addNode(ArpReqInput())
@@ -20,6 +26,15 @@ public class NetstackNodeManager: NodeManager {
         addNode(IPRouteOutput())
         addNode(IPRouteLinkOutput())
         addNode(EthernetOutput())
+        addNode(TcpInput())
+        addNode(UdpInput())
+        addNode(ConnLookup())
+        addNode(ConnCreate())
+        SwiftVSwitchVirtualServer.addIPVSNodes(self)
+        addNode(NatInput())
+        addNode(TcpNatInput())
+        addNode(UdpNatInput())
+        addNode(NatOutput())
     }
 }
 
@@ -218,6 +233,8 @@ class IPRoute: Node {
 
 class IP4Input: Node {
     private var icmpInput = NodeRef("icmp-input")
+    private var tcpInput = NodeRef("tcp-input")
+    private var udpInput = NodeRef("udp-input")
 
     init() {
         super.init(name: "ip4-input")
@@ -226,14 +243,19 @@ class IP4Input: Node {
     override func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
         mgr.initRef(&icmpInput)
+        mgr.initRef(&tcpInput)
+        mgr.initRef(&udpInput)
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
         if pkb.proto == IP_PROTOCOL_ICMP {
             return sched.schedule(pkb, to: icmpInput)
+        } else if pkb.proto == IP_PROTOCOL_TCP {
+            return sched.schedule(pkb, to: tcpInput)
+        } else if pkb.proto == IP_PROTOCOL_UDP {
+            return sched.schedule(pkb, to: udpInput)
         } else {
             assert(Logger.lowLevelDebug("unknown proto \(pkb.proto) for ipv4"))
-            // TODO: tcp and udp
             return sched.schedule(pkb, to: drop)
         }
     }
@@ -260,7 +282,7 @@ class IcmpInput: Node {
         if icmp.pointee.type == ICMP_PROTOCOL_TYPE_ECHO_REQ {
             return sched.schedule(pkb, to: pingReqInput)
         } else {
-            // TODO: handle other icmp types
+            assert(Logger.lowLevelDebug("unknown icmp type \(icmp.pointee.type)"))
             return sched.schedule(pkb, to: drop)
         }
     }
@@ -304,6 +326,8 @@ class PingReqInput: Node {
 
 class IP6Input: Node {
     private var icmp6Input = NodeRef("icmp6-input")
+    private var tcpInput = NodeRef("tcp-input")
+    private var udpInput = NodeRef("udp-input")
 
     init() {
         super.init(name: "ip6-input")
@@ -312,6 +336,8 @@ class IP6Input: Node {
     override func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
         mgr.initRef(&icmp6Input)
+        mgr.initRef(&tcpInput)
+        mgr.initRef(&udpInput)
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
@@ -322,9 +348,12 @@ class IP6Input: Node {
 
         if pkb.proto == IP_PROTOCOL_ICMPv6 {
             return sched.schedule(pkb, to: icmp6Input)
+        } else if pkb.proto == IP_PROTOCOL_TCP {
+            return sched.schedule(pkb, to: tcpInput)
+        } else if pkb.proto == IP_PROTOCOL_UDP {
+            return sched.schedule(pkb, to: udpInput)
         } else {
             assert(Logger.lowLevelDebug("unknown proto \(pkb.proto) for ipv6"))
-            // TODO: tcp and udp
             return sched.schedule(pkb, to: drop)
         }
     }
@@ -360,7 +389,7 @@ class Icmp6Input: Node {
         } else if icmp6.pointee.type == ICMPv6_PROTOCOL_TYPE_Neighbor_Advertisement {
             return sched.schedule(pkb, to: ndpNaInput)
         } else {
-            // TODO: handle other icmpv6 types
+            assert(Logger.lowLevelDebug("unknown icmpv6 type \(icmp6.pointee.type)"))
             return sched.schedule(pkb, to: drop)
         }
     }
@@ -545,6 +574,7 @@ class NdpNaInput: Node {
 
 class IPRouteOutput: Node {
     private var ipRouteLinkOuput = NodeRef("ip-route-link-output")
+    private var fastOutput = NodeRef("fast-output")
 
     init() {
         super.init(name: "ip-route-output")
@@ -553,9 +583,16 @@ class IPRouteOutput: Node {
     override func initGraph(mgr: NodeManager) {
         super.initGraph(mgr: mgr)
         mgr.initRef(&ipRouteLinkOuput)
+        mgr.initRef(&fastOutput)
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
+        if let conn = pkb.conn {
+            if conn.fastOutput.isValid {
+                return sched.schedule(pkb, to: fastOutput)
+            }
+        }
+
         guard let r = pkb.netstack!.routeTable.lookup(ip: pkb.ipDst) else {
             assert(Logger.lowLevelDebug("unable to find route to \(pkb.ipDst!)"))
             return sched.schedule(pkb, to: drop)
@@ -675,5 +712,235 @@ class EthernetOutput: Node {
 
         pkb.clearPacketInfo(from: .ETHER)
         return sched.schedule(pkb, to: devOutput)
+    }
+}
+
+class TcpInput: Node {
+    private var connLookup = NodeRef("conn-lookup")
+
+    init() {
+        super.init(name: "tcp-input")
+    }
+
+    override func initGraph(mgr: NodeManager) {
+        super.initGraph(mgr: mgr)
+        mgr.initRef(&connLookup)
+    }
+
+    override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
+        if pkb.upper == nil {
+            assert(Logger.lowLevelDebug("not valid tcp packet"))
+            return sched.schedule(pkb, to: drop)
+        }
+        sched.schedule(pkb, to: connLookup)
+    }
+}
+
+class UdpInput: Node {
+    private var connLookup = NodeRef("conn-lookup")
+
+    init() {
+        super.init(name: "udp-input")
+    }
+
+    override func initGraph(mgr: NodeManager) {
+        super.initGraph(mgr: mgr)
+        mgr.initRef(&connLookup)
+    }
+
+    override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
+        if pkb.upper == nil {
+            assert(Logger.lowLevelDebug("not valid udp packet"))
+            return sched.schedule(pkb, to: drop)
+        }
+        sched.schedule(pkb, to: connLookup)
+    }
+}
+
+class ConnLookup: Node {
+    private var connCreate = NodeRef("conn-create")
+
+    init() {
+        super.init(name: "conn-lookup")
+    }
+
+    override func initGraph(mgr: NodeManager) {
+        super.initGraph(mgr: mgr)
+        mgr.initRef(&connCreate)
+    }
+
+    override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
+        let tup = pkb.tuple!
+        let conn = pkb.netstack!.conntrack.lookup(tup)
+        guard let conn else {
+            assert(Logger.lowLevelDebug("conn not found for \(tup)"))
+            return sched.schedule(pkb, to: connCreate)
+        }
+        assert(Logger.lowLevelDebug("conn exists for \(tup)"))
+        pkb.conn = conn
+        sched.schedule(pkb, to: conn.nextNode)
+    }
+}
+
+class ConnCreate: Node {
+    private var ipvsConnCreate = NodeRef("ipvs-conn-create")
+
+    init() {
+        super.init(name: "conn-create")
+    }
+
+    override func initGraph(mgr: NodeManager) {
+        super.initGraph(mgr: mgr)
+        mgr.initRef(&ipvsConnCreate)
+    }
+
+    override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
+        // TODO: handle tcp/udp listeners
+        return sched.schedule(pkb, to: ipvsConnCreate)
+    }
+}
+
+class NatInput: Node {
+    private var tcpNatInput = NodeRef("tcp-nat-input")
+    private var udpNatInput = NodeRef("udp-nat-input")
+
+    init() {
+        super.init(name: "nat-input")
+    }
+
+    override func initGraph(mgr: NodeManager) {
+        super.initGraph(mgr: mgr)
+        mgr.initRef(&tcpNatInput)
+        mgr.initRef(&udpNatInput)
+    }
+
+    override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
+        let conn = pkb.conn!
+        guard let peer = conn.peer else {
+            assert(Logger.lowLevelDebug("no peer conn recorded in conn"))
+            return sched.schedule(pkb, to: drop)
+        }
+        assert(Logger.lowLevelDebug("conn \(conn.tup) -> peer \(peer.tup)"))
+
+        if pkb.proto == IP_PROTOCOL_TCP {
+            return sched.schedule(pkb, to: tcpNatInput)
+        } else if pkb.proto == IP_PROTOCOL_UDP {
+            return sched.schedule(pkb, to: udpNatInput)
+        } else {
+            assert(Logger.lowLevelDebug("unsupported nat protocol \(pkb.proto)"))
+            return sched.schedule(pkb, to: drop)
+        }
+    }
+}
+
+class TcpNatInput: Node {
+    private var natOutput = NodeRef("nat-output")
+
+    init() {
+        super.init(name: "tcp-nat-input")
+    }
+
+    override func initGraph(mgr: NodeManager) {
+        super.initGraph(mgr: mgr)
+        mgr.initRef(&natOutput)
+    }
+
+    override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
+        let conn = pkb.conn!
+        guard let peer = conn.peer else {
+            assert(Logger.lowLevelDebug("no peer conn recorded in conn"))
+            return sched.schedule(pkb, to: drop)
+        }
+
+        let tcp: UnsafeMutablePointer<swvs_tcphdr> = Convert.ptr2mutUnsafe(pkb.upper!)
+
+        if conn.isBeforeNat {
+            tcpStateTransfer(clientConn: conn, serverConn: peer, tcpFlags: tcp.pointee.flags, isFromClient: conn.isBeforeNat)
+        } else {
+            tcpStateTransfer(clientConn: peer, serverConn: conn, tcpFlags: tcp.pointee.flags, isFromClient: conn.isBeforeNat)
+        }
+        tcp.pointee.be_dst_port = Convert.reverseByteOrder(peer.tup.srcPort)
+        tcp.pointee.be_src_port = Convert.reverseByteOrder(peer.tup.dstPort)
+        // NO! do not call this: pkb.clearPacketInfo(only: .UPPER)
+        // the tuple would be used by nat-output and the packet info will be cleared there
+        conn.resetTimer()
+        return sched.schedule(pkb, to: natOutput)
+    }
+}
+
+class UdpNatInput: Node {
+    private var natOutput = NodeRef("nat-output")
+
+    init() {
+        super.init(name: "udp-nat-input")
+    }
+
+    override func initGraph(mgr: NodeManager) {
+        super.initGraph(mgr: mgr)
+        mgr.initRef(&natOutput)
+    }
+
+    override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
+        let conn = pkb.conn!
+        guard let peer = conn.peer else {
+            assert(Logger.lowLevelDebug("no peer conn recorded in conn"))
+            return sched.schedule(pkb, to: drop)
+        }
+
+        let udp: UnsafeMutablePointer<swvs_udphdr> = Convert.ptr2mutUnsafe(pkb.upper!)
+
+        if conn.isBeforeNat {
+            udpStateTransfer(clientConn: conn, serverConn: peer, isFromClient: conn.isBeforeNat)
+        } else {
+            udpStateTransfer(clientConn: peer, serverConn: conn, isFromClient: conn.isBeforeNat)
+        }
+        udp.pointee.be_dst_port = Convert.reverseByteOrder(peer.tup.srcPort)
+        udp.pointee.be_src_port = Convert.reverseByteOrder(peer.tup.dstPort)
+        // NO! do not call this: pkb.clearPacketInfo(only: .UPPER)
+        // the tuple would be used by nat-output and the packet info will be cleared there
+        conn.resetTimer()
+        return sched.schedule(pkb, to: natOutput)
+    }
+}
+
+class NatOutput: Node {
+    private var ipRouteOutput = NodeRef("ip-route-output")
+
+    init() {
+        super.init(name: "nat-output")
+    }
+
+    override func initGraph(mgr: NodeManager) {
+        super.initGraph(mgr: mgr)
+        mgr.initRef(&ipRouteOutput)
+    }
+
+    override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
+        let conn = pkb.conn!
+        guard let peer = conn.peer else {
+            assert(Logger.lowLevelDebug("no peer conn recorded in conn"))
+            return sched.schedule(pkb, to: drop)
+        }
+
+        if peer.tup.isIPv4 {
+            let ipv4 = pkb.convertToIPv4()
+            guard let ipv4 else {
+                assert(Logger.lowLevelDebug("unable to convert to ipv4"))
+                return sched.schedule(pkb, to: drop)
+            }
+            peer.tup.srcIp.copyInto(&ipv4.pointee.dst)
+            peer.tup.dstIp.copyInto(&ipv4.pointee.src)
+        } else {
+            let ipv6 = pkb.convertToIPv6()
+            guard let ipv6 else {
+                assert(Logger.lowLevelDebug("unable to convert to ipv6"))
+                return sched.schedule(pkb, to: drop)
+            }
+            peer.tup.srcIp.copyInto(&ipv6.pointee.dst)
+            peer.tup.dstIp.copyInto(&ipv6.pointee.src)
+        }
+
+        pkb.clearPacketInfo(from: .IP)
+        return sched.schedule(pkb, to: ipRouteOutput)
     }
 }

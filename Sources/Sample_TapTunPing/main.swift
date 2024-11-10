@@ -26,7 +26,7 @@ struct TapTunPingSample: ParsableCommand {
         let split = ipmask.split(separator: ",")
         for (idx, ipmaskStr) in split.enumerated() {
             if GetIPMask(from: String(ipmaskStr)) == nil {
-                throw ValidationError("ipmask[\(idx)]=\(ipmask) is not a valid ip")
+                throw ValidationError("ipmask[\(idx)]=\(ipmaskStr) is not a valid ip/mask")
             }
         }
     }

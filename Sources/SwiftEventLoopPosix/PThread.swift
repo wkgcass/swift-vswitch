@@ -54,6 +54,8 @@ class PThread: Thread {
         return loop_
     }
 
+    public let memPool = FixedSizeFixedCountSingleThreadMemPool(size: ThreadMemPoolArraySize, count: ThreadMemPoolCount)!
+
     public func threadlocal(get key: AnyHashable) -> Any? {
         return dict[key]
     }

@@ -153,6 +153,7 @@ open class NodeManager {
         addNode(stolen)
         addNode(devOutput)
         addNode(devInput)
+        addNode(FastOutputNode())
     }
 
     public func addNode(_ node: Node) {
@@ -174,6 +175,27 @@ open class NodeManager {
         for n in storage.values {
             n.initNode(nodeInit: nodeInit)
         }
+    }
+}
+
+public class DummyNodeManager: NodeManager {
+    public init() {
+        super.init(DevInput())
+    }
+}
+
+open class NetStackNodeManager: NodeManager {
+    var userInput: UserInput
+
+    public init(devInput: DevInput, userInput: UserInput) {
+        self.userInput = userInput
+        super.init(devInput)
+    }
+}
+
+public class DummyNetStackNodeManager: NetStackNodeManager {
+    public init() {
+        super.init(devInput: DevInput(), userInput: UserInput())
     }
 }
 
@@ -299,7 +321,7 @@ class DropNode: Node {
 
     override public func enqueue(_ pkb: PacketBuffer) -> Bool {
         // do nothing, just drop the packet
-        assert(Logger.lowLevelDebug("packet \(Unmanaged.passUnretained(pkb).toOpaque()) dropped"))
+        assert(Logger.lowLevelDebug("packet \(pkb) dropped"))
         return false
     }
 }
@@ -320,10 +342,25 @@ class DevOutput: Node {
         super.init(name: "dev-output")
     }
 
+    override func initGraph(mgr: NodeManager) {
+        super.initGraph(mgr: mgr)
+    }
+
     override func enqueue(_ pkb: PacketBuffer) -> Bool {
         guard let iface = pkb.outputIface else {
             assert(Logger.lowLevelDebug("outputIface not specified"))
             return false
+        }
+
+        if let conn = pkb.conn {
+            if conn.fastOutput.enabled && !conn.fastOutput.isValid {
+                conn.fastOutput.outdev = iface
+                if iface.meta.property.layer == .ETHER {
+                    conn.fastOutput.outDstMac = pkb.dstmac!
+                    conn.fastOutput.outSrcMac = pkb.srcmac!
+                }
+                conn.fastOutput.isValid = true
+            }
         }
 
         // clear switch and iface related fields
@@ -372,5 +409,46 @@ class DevOutput: Node {
         }
         iface.meta.statistics.txpkts += 1
         return true
+    }
+}
+
+class FastOutputNode: Node {
+    private var devOuptut = NodeRef("dev-output")
+
+    public init() {
+        super.init(name: "fast-output")
+    }
+
+    override func initGraph(mgr: NodeManager) {
+        super.initGraph(mgr: mgr)
+        mgr.initRef(&devOuptut)
+    }
+
+    override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
+        assert(Logger.lowLevelDebug("into fast-output: \(pkb)"))
+
+        let conn = pkb.conn!
+        assert(conn.fastOutput.enabled)
+        assert(conn.fastOutput.isValid)
+
+        if conn.fastOutput.outdev!.meta.property.layer == .ETHER {
+            guard let ether = pkb.ensureEthhdr() else {
+                assert(Logger.lowLevelDebug("no room for ethernet header"))
+                return sched.schedule(pkb, to: drop)
+            }
+            conn.fastOutput.outSrcMac.copyInto(&ether.pointee.src)
+            conn.fastOutput.outDstMac.copyInto(&ether.pointee.dst)
+        }
+        pkb.outputIface = conn.fastOutput.outdev
+        return sched.schedule(pkb, to: devOuptut)
+    }
+}
+
+open class UserInput: Node {
+    public init() {
+        super.init(name: "user-input")
+    }
+    open override func enqueue(_ pkb: PacketBuffer) -> Bool {
+        return false
     }
 }

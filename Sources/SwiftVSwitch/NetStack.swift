@@ -1,5 +1,6 @@
 import SwiftEventLoopCommon
 import SwiftVSwitchCHelper
+import SwiftVSwitchVirtualServerBase
 import VProxyCommon
 
 public class NetStack {
@@ -8,6 +9,8 @@ public class NetStack {
 
     public let arpTable: ArpTable
     public let routeTable: RouteTable
+    public let conntrack: Conntrack
+    public let ipvs: IPVS
     public private(set) var ipv4 = [IPv4: Set<IfaceEx>]()
     public private(set) var ipv6 = [IPv6: Set<IfaceEx>]()
     public private(set) var dev2ipv4 = [IfaceHandle: Set<IPv4>]()
@@ -18,6 +21,8 @@ public class NetStack {
         self.params = params
         arpTable = ArpTable(loop: loop, params: params)
         routeTable = RouteTable()!
+        conntrack = Conntrack()
+        ipvs = IPVS()
     }
 
     public func addIp(_ ip: (any IP)?, dev: IfaceEx) {
@@ -91,8 +96,8 @@ public class NetStack {
                 return nil
             }
             let src = v4ips.first!
-            let buf: [UInt8] = Arrays.newArray(capacity: VSwitchDefaultPacketBufferSize)
-            let raw = Arrays.getRaw(from: buf, offset: VSwitchReservedHeadroom)
+            let buf = RawBufRef()
+            let raw = buf.raw().advanced(by: VSwitchReservedHeadroom)
             let p: UnsafeMutablePointer<swvs_compose_eth_arp> = Convert.ptr2mutUnsafe(raw)
             iface.mac.copyInto(&p.pointee.ethhdr.src)
             MacAddress.BROADCAST.copyInto(&p.pointee.ethhdr.dst)
@@ -107,7 +112,7 @@ public class NetStack {
             v4.copyInto(&p.pointee.arp.arp_tip)
 
             return PacketBuffer(
-                packetArray: buf, offset: 0,
+                buf: buf,
                 pktlen: MemoryLayout<swvs_compose_eth_arp>.stride,
                 headroom: VSwitchReservedHeadroom,
                 tailroom: VSwitchDefaultPacketBufferSize - MemoryLayout<swvs_compose_eth_arp>.stride - VSwitchReservedHeadroom
@@ -119,8 +124,8 @@ public class NetStack {
                 return nil
             }
             let src = v6ips.first!
-            let buf: [UInt8] = Arrays.newArray(capacity: VSwitchDefaultPacketBufferSize)
-            let raw = Arrays.getRaw(from: buf, offset: VSwitchReservedHeadroom)
+            let buf = RawBufRef()
+            let raw = buf.raw().advanced(by: VSwitchReservedHeadroom)
             let p: UnsafeMutablePointer<swvs_compose_eth_ip6_icmp6_ns_slla> = Convert.ptr2mutUnsafe(raw)
             iface.mac.copyInto(&p.pointee.ethhdr.src)
             MacAddress.BROADCAST.copyInto(&p.pointee.ethhdr.dst)
@@ -144,7 +149,7 @@ public class NetStack {
             iface.mac.copyInto(&p.pointee.opt.addr)
 
             return PacketBuffer(
-                packetArray: buf, offset: 0,
+                buf: buf,
                 pktlen: MemoryLayout<swvs_compose_eth_ip6_icmp6_ns_slla>.stride,
                 headroom: VSwitchReservedHeadroom,
                 tailroom: VSwitchDefaultPacketBufferSize -

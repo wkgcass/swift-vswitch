@@ -6,7 +6,7 @@ import VProxyCommon
 public class VSwitch {
     public let loop: SelectorEventLoop
     private let params: VSwitchParams
-    private var ifaces = [String: IfaceEx]()
+    public private(set) var ifaces = [String: IfaceEx]()
     public private(set) var bridges = [UInt32: Bridge]()
     public private(set) var netstacks = [UInt32: NetStack]()
     private var forEachPollEvent: ForEachPollEvent?
@@ -75,7 +75,7 @@ public class VSwitch {
 
         var sched = Scheduler(mgr: params.ethsw, params.ethsw.devInput)
         while sched.schedule() {}
-        sched = Scheduler(mgr: params.netstack, params.netstack.devInput)
+        sched = Scheduler(mgr: params.netstack, params.netstack.devInput, params.netstack.userInput)
         while sched.schedule() {}
 
         return offset > 0
@@ -209,8 +209,6 @@ public class VSwitch {
         }
     }
 
-    // TODO: another route format
-
     public func delRoute(_ rule: any Network, netstackId: UInt32) {
         if netstackId == 0 {
             return
@@ -254,14 +252,14 @@ public struct VSwitchParams {
     public var arpRefreshCacheMillis: Int
 
     public var ethsw: NodeManager
-    public var netstack: NodeManager
+    public var netstack: NetStackNodeManager
 
     public init(
         macTableTimeoutMillis: Int = 300 * 1000,
         arpTableTimeoutMillis: Int = 4 * 3600 * 1000,
         arpRefreshCacheMillis: Int = 60 * 1000,
         ethsw: NodeManager,
-        netstack: NodeManager
+        netstack: NetStackNodeManager
     ) {
         self.macTableTimeoutMillis = macTableTimeoutMillis
         self.arpTableTimeoutMillis = arpTableTimeoutMillis
@@ -271,5 +269,5 @@ public struct VSwitchParams {
     }
 }
 
-public let VSwitchDefaultPacketBufferSize = 2048
+public let VSwitchDefaultPacketBufferSize = ThreadMemPoolArraySize
 public let VSwitchReservedHeadroom = 256

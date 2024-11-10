@@ -3,6 +3,7 @@ import Darwin
 #else
 import Glibc
 #endif
+import SwiftEventLoopCommon
 import SwiftVSwitchCHelper
 import VProxyCommon
 
@@ -24,7 +25,7 @@ public class PacketBuffer: CustomStringConvertible {
     public unowned var outputIface: IfaceEx? = nil
     public var outputRouteRule: RouteTable.RouteRule? = nil
 
-    private var packetArray: [UInt8]? // keep reference to it, or nil if no need to keep ref
+    private var buf: BufRef
     public private(set) var raw: UnsafePointer<UInt8> // pointer to the packet
     public var pktlen: Int
     public private(set) var headroom: Int
@@ -37,14 +38,17 @@ public class PacketBuffer: CustomStringConvertible {
     private var vlanState_: VlanState = .UNKNOWN
     private var vlan_: UInt16 = 0
     private var ethertype_: UInt16 = 0
-    private var ip4Src_: IPv4 = .init(from: "0.0.0.0")!
-    private var ip4Dst_: IPv4 = .init(from: "0.0.0.0")!
-    private var ip6Src_: IPv6 = .init(from: "::")!
-    private var ip6Dst_: IPv6 = .init(from: "::")!
+    private var ip4Src_ = IPv4.ANY
+    private var ip4Dst_ = IPv4.ANY
+    private var ip6Src_ = IPv6.ANY
+    private var ip6Dst_ = IPv6.ANY
     private var proto_: UInt8 = 0
     private var srcPort_: UInt16 = 0
     private var dstPort_: UInt16 = 0
     private var appLen_: UInt16 = 0
+    private var tup_: PktTuple? = nil
+
+    public var conn: Connection? = nil
 
     private var ether_: UnsafePointer<UInt8>?
     private var ip_: UnsafePointer<UInt8>?
@@ -282,33 +286,30 @@ public class PacketBuffer: CustomStringConvertible {
         return appLen_
     }
 
-    public init(packetArray: [UInt8], offset: Int, pktlen: Int, headroom: Int, tailroom: Int, hasEthernet: Bool = true) {
-        self.packetArray = packetArray
-        raw = Convert.mut2ptr(Arrays.getRaw(from: packetArray, offset: offset + headroom))
+    public var tuple: PktTuple? {
+        if flags & PKB_FLAG_UPPER_DONE == 0 {
+            ensurePktInfo(level: .UPPER)
+        }
+        if flags & PKB_FLAG_UPPER_FAIL != 0 {
+            return nil
+        }
+        if tup_ == nil {
+            tup_ = PktTuple(proto: proto_, srcPort: srcPort_, dstPort: dstPort_,
+                            srcIp: ipSrc!, dstIp: ipDst!)
+        }
+        return tup_
+    }
+
+    public init(buf: BufRef, pktlen: Int, headroom: Int, tailroom: Int, hasEthernet: Bool = true) {
+        self.buf = buf
+        let raw = buf.raw()
+        self.raw = raw.advanced(by: headroom)
         self.pktlen = pktlen
         self.headroom = headroom
         self.tailroom = tailroom
         if !hasEthernet {
             flags |= PKB_FLAG_NO_ETHER
         }
-    }
-
-    public init(raw: UnsafePointer<UInt8>, pktlen: Int, headroom: Int, tailroom: Int, hasEthernet: Bool = true) {
-        packetArray = nil
-        self.raw = raw
-        self.pktlen = pktlen
-        self.headroom = headroom
-        self.tailroom = tailroom
-        if !hasEthernet {
-            flags |= PKB_FLAG_NO_ETHER
-        }
-    }
-
-    public convenience init(copyFrom: UnsafeRawPointer, pktlen: Int) {
-        let array: [UInt8] = Arrays.newArray(capacity: pktlen + 256 + 256)
-        let raw = Arrays.getRaw(from: array, offset: 256)
-        memcpy(raw, copyFrom, pktlen)
-        self.init(packetArray: array, offset: 256, pktlen: pktlen, headroom: 256, tailroom: 256)
     }
 
     public init(_ other: PacketBuffer) {
@@ -321,18 +322,17 @@ public class PacketBuffer: CustomStringConvertible {
         outputIface = other.outputIface
         outputRouteRule = other.outputRouteRule
 
-        if let otherPacketArray = other.packetArray {
-            packetArray = Arrays.newArray(capacity: otherPacketArray.capacity, uninitialized: true)
-            memcpy(&packetArray!, otherPacketArray, otherPacketArray.capacity)
-            raw = Convert.mutraw2ptr(&packetArray!)
-                .advanced(by: Convert.ptr2mutptr(other.raw) - Arrays.getRaw(from: otherPacketArray))
+        if other.headroom + other.pktlen + other.tailroom == ThreadMemPoolArraySize {
+            buf = RawBufRef()
         } else {
-            packetArray = Arrays.newArray(capacity: other.headroom + other.pktlen + other.tailroom, uninitialized: true)
-            raw = Convert.mutraw2ptr(&packetArray!).advanced(by: other.headroom)
-            memcpy(&packetArray!,
-                   other.raw.advanced(by: -other.headroom),
-                   other.headroom + other.pktlen + other.tailroom)
+            buf = ArrayBufRef(Arrays.newArray(capacity: other.headroom + other.pktlen + other.tailroom,
+                                              uninitialized: true))
         }
+        raw = buf.raw().advanced(by: other.headroom)
+        memcpy(Convert.ptr2mutptr(buf.raw().advanced(by: -other.headroom)),
+               other.raw.advanced(by: -other.headroom),
+               other.headroom + other.pktlen + other.tailroom)
+
         pktlen = other.pktlen
         headroom = other.headroom
         tailroom = other.tailroom
@@ -351,6 +351,8 @@ public class PacketBuffer: CustomStringConvertible {
         srcPort_ = other.srcPort_
         dstPort_ = other.dstPort_
         appLen_ = other.appLen_
+        tup_ = other.tup_
+        conn = other.conn
         if let otherEther = other.ether_ {
             ether_ = raw.advanced(by: otherEther - other.raw)
         } else {
@@ -375,6 +377,9 @@ public class PacketBuffer: CustomStringConvertible {
 
     public func ensureEthhdr() -> UnsafeMutablePointer<swvs_ethhdr>? {
         if hasEthernet {
+            if flags & PKB_FLAG_ETHER_DONE == 0 {
+                ensurePktInfo(level: .ETHER)
+            }
             return ether_ == nil ? nil : Convert.ptr2mutUnsafe(ether_!)
         }
         if !occpuyHeadroom(MemoryLayout<swvs_ethhdr>.stride) {
@@ -395,9 +400,7 @@ public class PacketBuffer: CustomStringConvertible {
                 return nil
             }
             let mut = Convert.ptr2mutptr(ether_!)
-            for i in 0 ..< 12 {
-                mut.advanced(by: -MemoryLayout<swvs_vlantag>.stride + i).pointee = mut.advanced(by: i).pointee
-            }
+            memmove(mut.advanced(by: -4), mut, 12)
             vlanState_ = .REMOVED
             let ethvlan: UnsafeMutablePointer<swvs_compose_eth_vlan> = Convert.ptr2mutUnsafe(raw)
             ethvlan.pointee.ethhdr.be_type = BE_ETHER_TYPE_8021Q
@@ -426,12 +429,122 @@ public class PacketBuffer: CustomStringConvertible {
             return
         }
         let mut = Convert.ptr2mutptr(ether_!)
-        for i in 0 ..< 14 {
-            mut.advanced(by: 14 + MemoryLayout<swvs_vlantag>.stride - i).pointee = mut.advanced(by: 14 - i).pointee
-        }
+        memmove(mut.advanced(by: 4), mut, 14)
         _ = releaseHeadroom(MemoryLayout<swvs_vlantag>.stride)
         vlanState_ = .NO_VLAN
         ether_ = raw
+    }
+
+    public func convertToIPv4() -> UnsafeMutablePointer<swvs_ipv4hdr>? {
+        if flags & PKB_FLAG_IP_DONE == 0 {
+            ensurePktInfo(level: .IP)
+        }
+        if flags & PKB_FLAG_IP_FAIL != 0 {
+            return nil
+        }
+        if ethertype == ETHER_TYPE_IPv4 {
+            return Convert.ptr2mutUnsafe(ip_!)
+        }
+        if ethertype != ETHER_TYPE_IPv6 {
+            return nil
+        }
+        let v6: UnsafePointer<swvs_ipv6hdr> = Convert.ptr2ptrUnsafe(ip_!)
+        let hopLimits = v6.pointee.hop_limits
+
+        let oldIp = ip_!
+        ip_ = upper_!.advanced(by: -20)
+        let count = oldIp - raw
+        let delta = ip_! - oldIp
+        let oldRaw = raw
+        if delta > 0 {
+            _ = releaseHeadroom(delta)
+        } else { // maybe have a lot of ip options
+            if !occpuyHeadroom(-delta) {
+                assert(Logger.lowLevelDebug("unable to occupy headroom for ip6->ip4: \(-delta)"))
+                return nil
+            }
+        }
+        // +-----|--------+-----+-----+
+        // |     |        |     |     |
+        // raw newraw   oldIp   ip  upper
+        let newRaw = Convert.ptr2mutptr(raw)
+        memmove(newRaw, oldRaw, count)
+
+        let v4: UnsafeMutablePointer<swvs_ipv4hdr> = Convert.ptr2mutUnsafe(ip_!)
+        memset(v4, 0, 20)
+        v4.pointee.version_ihl = 0x45
+        v4.pointee.be_total_length = Convert.reverseByteOrder(UInt16(lengthFromIpToEnd))
+        v4.pointee.time_to_live = hopLimits
+        v4.pointee.proto = proto_
+        ethertype_ = ETHER_TYPE_IPv4
+        if ether_ != nil {
+            ether_ = raw
+            if vlanState_ != .NO_VLAN {
+                let ethervlan: UnsafeMutablePointer<swvs_compose_eth_vlan> = Convert.ptr2mutUnsafe(ether_!)
+                ethervlan.pointee.vlan.be_type = BE_ETHER_TYPE_IPv4
+            } else {
+                let ether: UnsafeMutablePointer<swvs_ethhdr> = Convert.ptr2mutUnsafe(ether_!)
+                ether.pointee.be_type = BE_ETHER_TYPE_IPv4
+            }
+        }
+        clearPacketInfo(only: .IP)
+        return v4
+    }
+
+    public func convertToIPv6() -> UnsafeMutablePointer<swvs_ipv6hdr>? {
+        if flags & PKB_FLAG_IP_DONE == 0 {
+            ensurePktInfo(level: .IP)
+        }
+        if flags & PKB_FLAG_IP_FAIL != 0 {
+            return nil
+        }
+        if ethertype == ETHER_TYPE_IPv6 {
+            return Convert.ptr2mutUnsafe(ip_!)
+        }
+        if ethertype != ETHER_TYPE_IPv4 {
+            return nil
+        }
+        let v4: UnsafePointer<swvs_ipv4hdr> = Convert.ptr2ptrUnsafe(ip_!)
+        let ttl = v4.pointee.time_to_live
+
+        let oldIp = ip_!
+        ip_ = upper_!.advanced(by: -40)
+        let count = oldIp - raw
+        let delta = oldIp - ip_!
+        let oldRaw = raw
+        if delta > 0 {
+            if !occpuyHeadroom(delta) {
+                assert(Logger.lowLevelDebug("unable to occupy headroom for ip4->ip6: \(-delta)"))
+                return nil
+            }
+        } else {
+            _ = releaseHeadroom(-delta)
+        }
+        //   |-------+-----+---------+----------+
+        //   |       |     |         |          |
+        // newraw    ip   raw      oldIp      upper
+        let newRaw = Convert.ptr2mutptr(raw)
+        memmove(newRaw, oldRaw, count)
+
+        let v6: UnsafeMutablePointer<swvs_ipv6hdr> = Convert.ptr2mutUnsafe(ip_!)
+        memset(v6, 0, 40)
+        v6.pointee.vtc_flow.0 = (6 << 4)
+        v6.pointee.be_payload_len = Convert.reverseByteOrder(UInt16(lengthFromUpperToEnd))
+        v6.pointee.next_hdr = proto_
+        v6.pointee.hop_limits = ttl
+        ethertype_ = ETHER_TYPE_IPv6
+        if ether_ != nil {
+            ether_ = raw
+            if vlanState_ != .NO_VLAN {
+                let ethervlan: UnsafeMutablePointer<swvs_compose_eth_vlan> = Convert.ptr2mutUnsafe(ether_!)
+                ethervlan.pointee.vlan.be_type = BE_ETHER_TYPE_IPv6
+            } else {
+                let ether: UnsafeMutablePointer<swvs_ethhdr> = Convert.ptr2mutUnsafe(ether_!)
+                ether.pointee.be_type = BE_ETHER_TYPE_IPv6
+            }
+        }
+        clearPacketInfo(only: .IP)
+        return v6
     }
 
     public func occpuyHeadroom(_ n: Int) -> Bool {
@@ -485,6 +598,7 @@ public class PacketBuffer: CustomStringConvertible {
             fallthrough
         case .UPPER:
             flags &= ~PKB_FLAG_UPPER_DONE
+            tup_ = nil
             fallthrough
         default:
             break
@@ -510,6 +624,7 @@ public class PacketBuffer: CustomStringConvertible {
             flags &= ~PKB_FLAG_IP_DONE
         case .UPPER:
             flags &= ~PKB_FLAG_UPPER_DONE
+            tup_ = nil
         }
         if let csum {
             csumState = csum
@@ -965,4 +1080,60 @@ public enum CSumState {
      * sw tx: pass
      */
     case COMPLETE
+}
+
+open class BufRef {
+    public init() {}
+
+    open func raw() -> UnsafePointer<UInt8> {
+        return UnsafePointer(bitPattern: 0)!
+    }
+
+    open func doDeinit() {}
+
+    deinit {
+        doDeinit()
+    }
+}
+
+public class ArrayBufRef: BufRef {
+    public var array: [UInt8]
+
+    public init(_ array: [UInt8]) {
+        self.array = array
+    }
+
+    override public func raw() -> UnsafePointer<UInt8> {
+        return Convert.mut2ptr(Arrays.getRaw(from: array))
+    }
+}
+
+public class RawBufRef: BufRef {
+    public let index: Int
+    private let raw_: UnsafePointer<UInt8>
+
+    override public init() {
+        let thread = FDProvider.get().currentThread()
+        if let thread, let res = thread.memPool.get() {
+            index = res.0
+            raw_ = Convert.mut2ptr(res.1)
+        } else {
+            index = -1
+            let m = malloc(VSwitchDefaultPacketBufferSize)!
+            raw_ = Convert.mutraw2ptr(m)
+        }
+    }
+
+    override public func raw() -> UnsafePointer<UInt8> {
+        return raw_
+    }
+
+    override public func doDeinit() {
+        if index == -1 {
+            free(Convert.ptr2mutraw(raw_))
+        } else {
+            let thread = FDProvider.get().currentThread()!
+            thread.memPool.store(index)
+        }
+    }
 }

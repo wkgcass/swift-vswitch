@@ -65,11 +65,10 @@ struct TestUDP {
                     _ = try fire.fd.write(buf, len: len - 1)
                     #expect((fire.fd as! any UdpFD).remoteAddress.description == "[::1]:33445")
                 } else {
-                    let (len, addr) = try (fire.fd as! any UdpFD).recv(&buf, len: buf.capacity)
-                    if addr == nil {
+                    guard let (len, addr) = try (fire.fd as! any UdpFD).recv(&buf, len: buf.capacity) else {
                         continue
                     }
-                    #expect(addr!.description.starts(with: "[::1]:"))
+                    #expect(addr.description.starts(with: "[::1]:"))
                     #expect((fire.fd as! any UdpFD).localAddress.description == "[::1]:33445")
 
                     if len > 0 {
@@ -82,7 +81,7 @@ struct TestUDP {
                     if len <= 1 {
                         continue
                     }
-                    _ = try (fire.fd as! any UdpFD).send(buf, len: len - 1, remote: addr!)
+                    _ = try (fire.fd as! any UdpFD).send(buf, len: len - 1, remote: addr)
                 }
             }
         }

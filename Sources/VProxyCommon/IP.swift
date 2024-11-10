@@ -8,6 +8,27 @@ public protocol IP: CustomStringConvertible, Equatable, Hashable {
     func copyInto(_ p: UnsafeMutableRawPointer)
 }
 
+public extension IP {
+    func equals(_ other: any IP) -> Bool {
+        if let v4 = self as? IPv4 {
+            guard let o = other as? IPv4 else {
+                return false
+            }
+            return v4 == o
+        } else {
+            let v6 = self as! IPv6
+            guard let o = other as? IPv6 else {
+                return false
+            }
+            return v6 == o
+        }
+    }
+}
+
+public func GetAnyIpWithSameAFAs(ip: any IP) -> any IP {
+    return ip is IPv4 ? IPv4.ANY : IPv6.ANY
+}
+
 public func GetIP(from ip: String) -> (any IP)? {
     let v4 = IPv4(from: ip)
     if v4 != nil {
@@ -79,6 +100,8 @@ public struct IPv4: IP {
     public static func == (lhs: IPv4, rhs: IPv4) -> Bool {
         return lhs.bytes == rhs.bytes
     }
+
+    public nonisolated(unsafe) static let ANY = IPv4(from: "0.0.0.0")!
 }
 
 public struct IPv6: IP {
@@ -210,4 +233,6 @@ public struct IPv6: IP {
             lhs.bytes.14 == rhs.bytes.14 &&
             lhs.bytes.15 == rhs.bytes.15
     }
+
+    public nonisolated(unsafe) static let ANY = IPv6(from: "::")!
 }

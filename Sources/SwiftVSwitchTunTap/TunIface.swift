@@ -46,20 +46,12 @@ public class TunIface: Iface, Hashable {
         fd.close()
     }
 
-    private var lastBuf: [UInt8]? = nil
-
     public func dequeue(_ packets: inout [PacketBuffer], off: inout Int) {
         while true {
             if off >= packets.count {
                 break
             }
-            var buf: [UInt8]
-            if lastBuf == nil {
-                buf = Arrays.newArray(capacity: VSwitchDefaultPacketBufferSize)
-            } else {
-                buf = lastBuf!
-                lastBuf = nil
-            }
+            let buf = RawBufRef()
             var readOff = VSwitchReservedHeadroom
 #if os(Linux)
 #else
@@ -67,20 +59,17 @@ public class TunIface: Iface, Hashable {
 #endif
             let n: Int
             do {
-                n = try fd.read(&buf, off: readOff, len: VSwitchDefaultPacketBufferSize - readOff)
+                n = try fd.read(Convert.ptr2mutptr(buf.raw()).advanced(by: readOff), len: VSwitchDefaultPacketBufferSize - readOff)
             } catch {
                 Logger.error(.SOCKET_ERROR, "failed to read packet from \(fd)", error)
                 break
             }
             assert(Logger.lowLevelDebug("read packet of len=\(n)"))
             if n == 0 {
-                lastBuf = buf
                 // nothing read, maybe no packets
                 break
             }
-            let pkb = PacketBuffer(packetArray: buf,
-                                   offset: 0,
-                                   pktlen: n,
+            let pkb = PacketBuffer(buf: buf, pktlen: n,
                                    headroom: VSwitchReservedHeadroom,
                                    tailroom: VSwitchDefaultPacketBufferSize - n - VSwitchReservedHeadroom,
                                    hasEthernet: false)

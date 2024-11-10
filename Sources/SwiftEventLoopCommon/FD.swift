@@ -30,10 +30,10 @@ public extension FD {
 }
 
 public protocol InetFD: FD {
-    func bind(_ ipport: IPPort) throws(IOException)
-    func connect(_ ipport: IPPort) throws(IOException)
-    var localAddress: IPPort { get }
-    var remoteAddress: IPPort { get }
+    func bind(_ ipport: any IPPort) throws(IOException)
+    func connect(_ ipport: any IPPort) throws(IOException)
+    var localAddress: any IPPort { get }
+    var remoteAddress: any IPPort { get }
 }
 
 public protocol StreamFD: InetFD {
@@ -52,10 +52,10 @@ public extension StreamFD {
 public protocol TcpFD: StreamFD {}
 
 public protocol DatagramFD: InetFD {
-    func recv(_ buf: inout [UInt8], len: Int) throws(IOException) -> (Int, IPPort?)
-    func recv(_ buf: inout [UInt8], off: Int, len: Int) throws(IOException) -> (Int, IPPort?)
-    func send(_ buf: [UInt8], len: Int, remote: IPPort) throws(IOException) -> Int
-    func send(_ buf: [UInt8], off: Int, len: Int, remote: IPPort) throws(IOException) -> Int
+    func recv(_ buf: inout [UInt8], len: Int) throws(IOException) -> (Int, any IPPort)?
+    func recv(_ buf: inout [UInt8], off: Int, len: Int) throws(IOException) -> (Int, any IPPort)?
+    func send(_ buf: [UInt8], len: Int, remote: any IPPort) throws(IOException) -> Int
+    func send(_ buf: [UInt8], off: Int, len: Int, remote: any IPPort) throws(IOException) -> Int
 }
 
 public protocol UdpFD: DatagramFD {}

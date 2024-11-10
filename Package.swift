@@ -15,6 +15,7 @@ let package = Package(
         .library(name: "swift-vswitch-tuntap", targets: ["SwiftVSwitchTunTap"]),
         .executable(name: "sample-eventloop", targets: ["Sample_EventLoop"]),
         .executable(name: "sample-taptunping", targets: ["Sample_TapTunPing"]),
+        .executable(name: "sample-vs", targets: ["Sample_VirtualServer"]),
     ],
     dependencies: [
         .package(url: "https://github.com/davecom/SwiftPriorityQueue.git", revision: "1.4.0"),
@@ -45,6 +46,7 @@ let package = Package(
             name: "SwiftVSwitch",
             dependencies: [
                 "SwiftEventLoopCommon", "VProxyChecksum", "SwiftVSwitchCHelper", "poptrie",
+                "SwiftVSwitchVirtualServerBase",
             ]
         ),
         // vswitch tuntap ifaces
@@ -64,6 +66,19 @@ let package = Package(
         // netstack node graph
         .target(
             name: "SwiftVSwitchNetStack",
+            dependencies: [
+                "SwiftVSwitch", "SwiftVSwitchVirtualServer",
+            ]
+        ),
+        // ipvs
+        .target(
+            name: "SwiftVSwitchVirtualServerBase",
+            dependencies: [
+                "VProxyCommon",
+            ]
+        ),
+        .target(
+            name: "SwiftVSwitchVirtualServer",
             dependencies: [
                 "SwiftVSwitch",
             ]
@@ -88,6 +103,15 @@ let package = Package(
                 "SwiftVSwitchTunTap",
                 "SwiftEventLoopPosix",
                 "SwiftVSwitchEthFwd",
+                "SwiftVSwitchNetStack",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]
+        ),
+        .executableTarget(
+            name: "Sample_VirtualServer",
+            dependencies: [
+                "SwiftVSwitchTunTap",
+                "SwiftEventLoopPosix",
                 "SwiftVSwitchNetStack",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]

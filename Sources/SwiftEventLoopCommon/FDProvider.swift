@@ -42,19 +42,23 @@ public protocol FDsWithCoreAffinity: FDs {
 public struct SelectorOptions: Sendable {
     public static let defaultOpts = SelectorOptions()
 
-    public internal(set) var preferPoll = false
-    public internal(set) var coreAffinity: Int64 = -1
-    public internal(set) var epfd = 0
+    public var preferPoll = false
+    public var coreAffinity: Int64 = -1
+    public var epfd = 0
 
     public init() {}
 }
 
+public let ThreadMemPoolArraySize = 2048
+public let ThreadMemPoolCount = 8192
+
 public protocol Thread: AnyObject {
     func start()
     func join()
-
+    
     func setLoop(shouldBeCalledFromSelectorEventLoop loop: SelectorEventLoop?)
     func getLoop() -> SelectorEventLoop?
+    var memPool: FixedSizeFixedCountSingleThreadMemPool { get }
 
     func threadlocal(get key: AnyHashable) -> Any?
     func threadlocal(set key: AnyHashable, _ value: Any)

@@ -248,7 +248,7 @@ public class InetPosixFD: PosixFD, InetFD {
         super.init(fd: fd)
     }
 
-    public func bind(_ ipport: IPPort) throws(IOException) {
+    public func bind(_ ipport: any IPPort) throws(IOException) {
         var (n, addr) = ipport.toGeneralSockAddr()
         let err = globalBind(fd, Convert.ptr2ptrUnsafe(&addr), n)
         if err != 0 {
@@ -258,7 +258,7 @@ public class InetPosixFD: PosixFD, InetFD {
         _ = listen(fd, backlog) // maybe udp, so ignore error
     }
 
-    public func connect(_ ipport: IPPort) throws(IOException) {
+    public func connect(_ ipport: any IPPort) throws(IOException) {
         var (n, addr) = ipport.toGeneralSockAddr()
         var errno: Int32 = 0
         let err = connectWithErrno(fd, Convert.ptr2ptrUnsafe(&addr), n, &errno)
@@ -339,11 +339,11 @@ public class StreamPosixFD: InetPosixFD, StreamFD {
 }
 
 public class DatagramPosixFD: InetPosixFD, DatagramFD {
-    public func recv(_ buf: inout [UInt8], len: Int) throws(IOException) -> (Int, IPPort?) {
+    public func recv(_ buf: inout [UInt8], len: Int) throws(IOException) -> (Int, any IPPort)? {
         return try recv(&buf, off: 0, len: len)
     }
 
-    public func recv(_ buf: inout [UInt8], off: Int, len: Int) throws(IOException) -> (Int, IPPort?) {
+    public func recv(_ buf: inout [UInt8], off: Int, len: Int) throws(IOException) -> (Int, any IPPort)? {
         var errno: Int32 = 0
         let n: Int
         let res: any IPPort
@@ -360,7 +360,7 @@ public class DatagramPosixFD: InetPosixFD, DatagramFD {
         }
         if n < 0 {
             if errno == EWOULDBLOCK {
-                return (0, nil)
+                return nil
             }
             throw IOException("failed to recv", errno: errno)
         }

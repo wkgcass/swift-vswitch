@@ -4,7 +4,7 @@ import Darwin
 import Glibc
 #endif
 
-public func GetIPPort(from: String) -> IPPort? {
+public func GetIPPort(from: String) -> (any IPPort)? {
     let index = from.lastIndex(of: ":")
     guard let index else {
         return nil
@@ -28,9 +28,10 @@ public func GetIPPort(from: String) -> IPPort? {
     }
 }
 
-public protocol IPPort: CustomStringConvertible {
+public protocol IPPort: CustomStringConvertible, Hashable {
     var ip: any IP { get }
     var port: UInt16 { get }
+    func equals(_ other: any IPPort) -> Bool
 }
 
 public extension IPPort {
@@ -56,6 +57,21 @@ public extension IPPort {
             return (socklen_t(MemoryLayout<sockaddr_in6>.stride), ret)
         } else {
             return (socklen_t(MemoryLayout<sockaddr_in>.stride), ret)
+        }
+    }
+
+    func equals(_ other: any IPPort) -> Bool {
+        if let v4 = self as? IPv4Port {
+            guard let other4 = other as? IPv4Port else {
+                return false
+            }
+            return v4 == other4
+        } else {
+            let v6 = self as! IPv6Port
+            guard let other6 = other as? IPv6Port else {
+                return false
+            }
+            return v6 == other6
         }
     }
 }
