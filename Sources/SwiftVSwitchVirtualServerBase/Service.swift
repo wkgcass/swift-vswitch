@@ -14,6 +14,7 @@ public class Service {
         self.vip = vip
         self.port = port
         self.sched = sched
+        self.sched.initWith(svc: self)
     }
 
     public func schedule() -> Dest? {
@@ -28,7 +29,7 @@ public class Service {
         }
 
         dests.append(dest)
-        sched.update()
+        sched.updateFor(svc: self)
         return true
     }
 
@@ -56,10 +57,10 @@ public class Dest {
     public private(set) var ip: any IP
     public private(set) var port: UInt16
     public private(set) var service: Service
-    public private(set) var weight: UInt8
+    public private(set) var weight: Int
     public private(set) var fwd: FwdMethod
 
-    public init(_ ip: any IP, _ port: UInt16, service: Service, weight: UInt8, fwd: FwdMethod) {
+    public init(_ ip: any IP, _ port: UInt16, service: Service, weight: Int, fwd: FwdMethod) {
         self.ip = ip
         self.port = port
         self.service = service

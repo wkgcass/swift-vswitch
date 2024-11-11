@@ -15,7 +15,7 @@ struct VirtualServerSample: ParsableCommand {
     @Option(help: "Device name or pattern.") var devName: String
     @Option(help: "(IP/Mask)s separated by `,`.") var vip: String
     @Option(help: "Port for the virtual server.") var port: UInt16
-    @Option(help: "Dest ip:port.") var dest: String
+    @Option(help: "Dest (ip:port{weight})s separated by `,`.") var dest: String
     @Option(help: "Core affinity, which is a bitmask.") var coreAffinity: Int64?
 
     func validate() throws {
@@ -28,8 +28,26 @@ struct VirtualServerSample: ParsableCommand {
                 throw ValidationError("vip[\(idx)]=\(vipmask) is not a valid ip/mask")
             }
         }
-        if GetIPPort(from: dest) == nil {
-            throw ValidationError("dest=\(dest) is not a valid ip")
+        let destSplit = dest.split(separator: ",")
+        for (idx, ipportweight) in destSplit.enumerated() {
+            var ipportStr = String(ipportweight)
+            var weightStr = "10"
+            let braceIdx = ipportweight.firstIndex(of: "{")
+            if let braceIdx {
+                if !ipportweight.hasSuffix("}") {
+                    throw ValidationError("dest[\(idx)]=\(ipportweight) is not a valid ip:port{weight}, contains `{` but does not end with `}`")
+                }
+                weightStr = String(ipportweight[ipportweight.index(braceIdx, offsetBy: 1) ..< ipportweight.index(before: ipportweight.endIndex)])
+                ipportStr = String(ipportweight[..<braceIdx])
+            }
+
+            if GetIPPort(from: String(ipportStr)) == nil {
+                throw ValidationError("dest[\(idx)]=\(ipportweight) doesn't contain valid ip:port: \(ipportStr)")
+            }
+            let weight = Int(weightStr)
+            if weight == nil {
+                throw ValidationError("dest[\(idx)]=\(ipportweight) doesn't contain valid weight: \(weightStr)")
+            }
         }
     }
 
@@ -42,7 +60,20 @@ struct VirtualServerSample: ParsableCommand {
         for (idx, vipmask) in split.enumerated() {
             vips[idx] = GetIPMask(from: String(vipmask))!
         }
-        let destIpPort = GetIPPort(from: dest)!
+        let destSplit = dest.split(separator: ",")
+        var dests: [(any IPPort, Int)?] = Arrays.newArray(capacity: destSplit.count)
+        for (idx, ipportweight) in destSplit.enumerated() {
+            var ipportStr = String(ipportweight)
+            var weightStr = "10"
+            let braceIdx = ipportweight.firstIndex(of: "{")
+            if let braceIdx {
+                weightStr = String(ipportweight[ipportweight.index(braceIdx, offsetBy: 1) ..< ipportweight.index(before: ipportweight.endIndex)])
+                ipportStr = String(ipportweight[..<braceIdx])
+            }
+            let ipport = GetIPPort(from: String(ipportStr))!
+            let weight = Int(weightStr)!
+            dests[idx] = (ipport, weight)
+        }
 
         var opts = SelectorOptions()
         if let coreAffinity {
@@ -65,11 +96,17 @@ struct VirtualServerSample: ParsableCommand {
                     let svc = Service(proto: proto,
                                       vip: vipmask!.ip,
                                       port: port,
-                                      sched: RoundRobinDestScheduler.instance)
+                                      sched: WeightedRoundRobinDestScheduler())
                     _ = netstack.ipvs.addService(svc)
-                    _ = svc.addDest(Dest(destIpPort.ip, destIpPort.port, service: svc, weight: 10, fwd: .FNAT))
+                    for destIpPortWeight in dests {
+                        let destIpPortWeight = destIpPortWeight!
+                        let destIpPort = destIpPortWeight.0
+                        let weight = destIpPortWeight.1
+                        _ = svc.addDest(Dest(destIpPort.ip, destIpPort.port, service: svc, weight: weight, fwd: .FNAT))
+                    }
                     for vipmask2 in vips {
-                        _ = svc.addLocalIP(vipmask2!.ip)
+                        let vipmask2 = vipmask2!
+                        _ = svc.addLocalIP(vipmask2.ip)
                     }
                 }
             }

@@ -12,7 +12,7 @@ docker run --name=swift --privileged -it -v `pwd`:/swvs --workdir=/swvs swift:6.
 # sample-vs
 
 A simple load balancer which demonstrates functionalities of the ipvs module.  
-Supports tcp/udp v4/v6.
+Supports `tcp/udp | v4/v6 | wrr`.
 
 ## Linux
 
@@ -34,6 +34,11 @@ swift run -c release sample-vs \
     --port=80 \
     --dest='[fd00::1]:8080'
 ```
+
+> You can specify multiple dests separated by `,`.  
+> Also you can specify the weight of each dest, with this syntax: `ip:port{weight}`.  
+> e.g. `192.168.111.2:8080{5},192.168.111.2:9090{10}`.  
+> The default weight is `10`.
 
 Run the following shell script to initialize the tap device:
 
