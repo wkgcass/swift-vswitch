@@ -4,8 +4,8 @@ public class RingBuffer<T> {
     private var e = 0
     private var sIsAfterE = false
 
-    public init(capacity: Int) {
-        buf = Arrays.newArray(capacity: capacity, uninitialized: true)
+    public init(capacity: Int, uninitialized: Bool = false) {
+        buf = Arrays.newArray(capacity: capacity, uninitialized: uninitialized)
     }
 
     public func storeFromNoWrap(_ f: (inout [T], Int, Int) throws -> Int) rethrows -> Int {

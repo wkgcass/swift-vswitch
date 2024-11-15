@@ -1,3 +1,4 @@
+import Atomics
 import SwiftPriorityQueue
 import VProxyCommon
 
@@ -53,7 +54,7 @@ public class SelectorEventLoop {
 
     private func tryRunnable(_ r: Runnable) {
         do {
-            try r()
+            try r.run()
         } catch {
             Logger.error(.IMPROPER_USE, "exception thrown in nextTick event ", error)
         }
@@ -65,7 +66,7 @@ public class SelectorEventLoop {
         handleForEachLoopEvents()
     }
 
-    private func handleRunOnLoopEvents() {
+    public func handleRunOnLoopEvents() {
         let len = runOnLoopEvents.count
         // only run available events when entering this function
         for _ in 0 ..< len {
@@ -261,11 +262,15 @@ public class SelectorEventLoop {
         return current.handle() != runningThread.handle()
     }
 
-    private func wakeup() {
+    public func wakeup() {
         selector.wakeup()
     }
 
-    public func nextTick(_ r: @escaping Runnable) {
+    public func nextTick(_ r: @escaping RunnableFunc) {
+        nextTick(Runnable.wrap(r))
+    }
+
+    public func nextTick(_ r: Runnable) {
         runOnLoopEvents.push(r)
         if !needWake() {
             return // we do not need to wakeup because it's not started or is already waken up
@@ -273,7 +278,11 @@ public class SelectorEventLoop {
         wakeup() // wake the selector because new event is added
     }
 
-    public func runOnLoop(_ r: @escaping Runnable) {
+    public func runOnLoop(_ r: @escaping RunnableFunc) {
+        runOnLoop(Runnable.wrap(r))
+    }
+
+    public func runOnLoop(_ r: Runnable) {
         if !needWake() {
             tryRunnable(r) // directly run if is already on the loop thread
         } else {
@@ -281,11 +290,30 @@ public class SelectorEventLoop {
         }
     }
 
+    public func blockUntilFinish(_ r: @escaping () -> Void) {
+        if !needWake() {
+            r()
+            return
+        }
+        let finished = ManagedAtomic<Bool>(false)
+        nextTick {
+            r()
+            _ = finished.compareExchange(expected: false, desired: true, ordering: .sequentiallyConsistent)
+        }
+        while !finished.load(ordering: .sequentiallyConsistent) {
+            OS.sleep(millis: 1)
+        }
+    }
+
     public func forEachLoop(_ e: ForEachPollEvent) {
         runOnLoop { self.forEachLoopEvents.append(e) }
     }
 
-    public func delay(millis: Int, _ r: @escaping Runnable) -> TimerEvent {
+    public func delay(millis: Int, _ r: @escaping RunnableFunc) -> TimerEvent {
+        return delay(millis: millis, Runnable.wrap(r))
+    }
+
+    public func delay(millis: Int, _ r: Runnable) -> TimerEvent {
         let e = TimerEvent(self)
         // timeQueue is not thread safe
         // modify it in the event loop's thread
@@ -295,7 +323,11 @@ public class SelectorEventLoop {
         return e
     }
 
-    public func period(intervalMillis: Int, _ r: @escaping Runnable) -> PeriodicEvent {
+    public func period(intervalMillis: Int, _ r: @escaping RunnableFunc) -> PeriodicEvent {
+        return period(intervalMillis: intervalMillis, Runnable.wrap(r))
+    }
+
+    public func period(intervalMillis: Int, _ r: Runnable) -> PeriodicEvent {
         let pe = PeriodicEvent(runnable: r, loop: self, intervalMillis: intervalMillis)
         pe.start()
         return pe
@@ -486,7 +518,7 @@ class RegisterData {
 public class ForEachPollEvent {
     public var valid = true
     public let r: Runnable
-    public init(r: @escaping Runnable) {
+    public init(_ r: Runnable) {
         self.r = r
     }
 }

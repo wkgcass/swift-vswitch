@@ -4,6 +4,8 @@ import Darwin
 import Glibc
 #endif
 
+let globalExit = exit
+
 public class OS {
     private init() {}
 
@@ -15,5 +17,9 @@ public class OS {
 
     public static func sleep(millis: Int) {
         usleep(useconds_t(millis * 1000))
+    }
+
+    public static func exit(code: Int32) {
+        globalExit(code)
     }
 }

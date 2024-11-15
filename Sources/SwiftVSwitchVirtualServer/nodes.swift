@@ -50,12 +50,12 @@ class IPVSConnCreate: Node {
             }
 
             let clientConn = Connection(ct: conntrack, isBeforeNat: true, tup: pkb.tuple!, nextNode: natInput)
-            clientConn.ud = dest
+            clientConn.dest = dest
             clientConn.fastOutput.enabled = true
             clientConn.fastOutput.enabled = true
 
             let serverConn = Connection(ct: conntrack, isBeforeNat: false, tup: afterNat, nextNode: natInput)
-            serverConn.ud = dest
+            serverConn.dest = dest
             serverConn.fastOutput.enabled = true
             serverConn.fastOutput.enabled = true
 

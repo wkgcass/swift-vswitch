@@ -86,7 +86,7 @@ class EthernetInput: Node {
         }
 
         let netstackId = pkb.inputIface!.toNetstack
-        let netstack = nodeInit.sw.netstacks[netstackId]
+        let netstack = sched.sw.netstacks[netstackId]
         if netstack == nil {
             assert(Logger.lowLevelDebug("netstack \(netstackId) not found"))
             return sched.schedule(pkb, to: drop)
@@ -125,7 +125,14 @@ class ArpInput: Node {
         if arp.pointee.be_arp_opcode == BE_ARP_PROTOCOL_OPCODE_REQ ||
             arp.pointee.be_arp_opcode == BE_ARP_PROTOCOL_OPCODE_RESP
         {
-            pkb.netstack!.arpTable.record(mac: pkb.srcmac!, ip: pkb.ipSrc!)
+            let srcmac = pkb.srcmac!
+            let ip = pkb.ipSrc!
+            let netstackId = pkb.netstack!.id
+            sched.sw.foreachWorker { sw in
+                if let netstack = sw.netstacks[netstackId] {
+                    netstack.arpTable.record(mac: srcmac, ip: ip)
+                }
+            }
         }
 
         if arp.pointee.be_arp_opcode == BE_ARP_PROTOCOL_OPCODE_REQ {
@@ -203,7 +210,7 @@ class IPRoute: Node {
 
         if pkb.netstack == nil {
             let netstackId = pkb.inputIface!.toNetstack
-            let netstack = nodeInit.sw.netstacks[netstackId]
+            let netstack = sched.sw.netstacks[netstackId]
             if netstack == nil {
                 assert(Logger.lowLevelDebug("netstack \(netstackId) not found"))
                 return sched.schedule(pkb, to: drop)
@@ -471,7 +478,13 @@ class NdpNsInput: Node {
         }
 
         assert(Logger.lowLevelDebug("begin to handle the icmpv6 ndp-ns ..."))
-        pkb.netstack!.arpTable.record(mac: srcmacInOpt, ip: pkb.ipSrc!)
+        let ipsrc = pkb.ipSrc!
+        let netstackId = pkb.netstack!.id
+        sched.sw.foreachWorker { sw in
+            if let netstack = sw.netstacks[netstackId] {
+                netstack.arpTable.record(mac: srcmacInOpt, ip: ipsrc)
+            }
+        }
 
         let ether: UnsafeMutablePointer<swvs_ethhdr> = Convert.ptr2mutUnsafe(pkb.raw)
 
@@ -565,8 +578,14 @@ class NdpNaInput: Node {
         }
 
         assert(Logger.lowLevelDebug("begin to handle the icmpv6 ndp-na ..."))
-        pkb.netstack!.arpTable.record(mac: srcmacInOpt, ip: target)
-        pkb.netstack!.arpTable.record(mac: srcmacInOpt, ip: pkb.ipSrc!)
+        let netstackId = pkb.netstack!.id
+        let ipsrc = pkb.ipSrc!
+        sched.sw.foreachWorker { sw in
+            if let netstack = sw.netstacks[netstackId] {
+                netstack.arpTable.record(mac: srcmacInOpt, ip: target)
+                netstack.arpTable.record(mac: srcmacInOpt, ip: ipsrc)
+            }
+        }
 
         return sched.schedule(pkb, to: stolen)
     }
@@ -772,13 +791,41 @@ class ConnLookup: Node {
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
         let tup = pkb.tuple!
         let conn = pkb.netstack!.conntrack.lookup(tup)
-        guard let conn else {
-            assert(Logger.lowLevelDebug("conn not found for \(tup)"))
-            return sched.schedule(pkb, to: connCreate)
+        if conn == nil {
+            // try to find conn in global conntrack
+            guard let (gconn, lock) = pkb.netstack!.conntrack.global.lookup(tup) else {
+                assert(Logger.lowLevelDebug("conn not found for \(tup)"))
+                return sched.schedule(pkb, to: connCreate)
+            }
+            if !migrate(pkb, sched, gconn) {
+                assert(Logger.lowLevelDebug("need to redirect the packet to another worker"))
+                pkb.conn = gconn.conn
+                gconn.conn.ct.sw.reenqueue(pkb)
+                lock.unlock()
+                return
+            }
+            lock.unlock()
+            // fallthrough
         }
         assert(Logger.lowLevelDebug("conn exists for \(tup)"))
         pkb.conn = conn
-        sched.schedule(pkb, to: conn.nextNode)
+        sched.schedule(pkb, to: conn!.nextNode)
+    }
+
+    @inline(__always)
+    private func migrate(_ pkb: PacketBuffer, _ sched: Scheduler, _ gconn: GlobalConnEntry) -> Bool {
+        assert(Logger.lowLevelDebug("check whether we can migrate to another thread"))
+        if gconn.needToMigrate(swIndex: sched.sw.index) {
+            let node = sched.mgr.getNodeBy(name: gconn.conn.nextNode.name)
+            if let node {
+                var ref = NodeRef(node.name)
+                ref.set(node)
+                gconn.conn.nextNode = ref
+                pkb.netstack!.conntrack.migrate(gconn.conn)
+                return true
+            }
+        }
+        return false
     }
 }
 

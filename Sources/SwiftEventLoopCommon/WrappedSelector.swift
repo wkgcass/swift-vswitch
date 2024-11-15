@@ -17,7 +17,7 @@ public class WrappedSelector: FDSelector {
         }
     }
 
-    private let VIRTUAL_LOCK = Lock() // only lock when calculating and registering, which would be enough for current code base
+    private var VIRTUAL_LOCK = Lock() // only lock when calculating and registering, which would be enough for current code base
     private var virtualSocketFDs = [VirtualFDHandle: REntry]()
     private var readableFired = Set<FDHandle>()
     private var writableFired = Set<FDHandle>()

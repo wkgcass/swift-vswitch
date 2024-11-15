@@ -1,30 +1,37 @@
 import Collections
+import WaitfreeMpscQueue
 
-public class ConcurrentQueue<E> {
-    private var queue = Deque<E>()
-    private let lock = Lock()
+public class ConcurrentQueue<E: AnyObject> {
+    private var queue = mpscq()
 
-    public init() {}
-
-    public func isEmpty() -> Bool {
-        return count == 0
+    public init() {
+        mpscq_create(&queue, 2 << 18)
     }
 
     public func push(_ e: E) {
-        lock.lock()
-        queue.append(e)
-        lock.unlock()
+        let ptr = Unmanaged<E>.passRetained(e).toOpaque()
+        if !mpscq_enqueue(&queue, ptr) {
+            Logger.warn(.ALERT, "failed to enqueue to ConcurrentQueue")
+            Unmanaged<E>.fromOpaque(ptr).release()
+        }
     }
 
     public func pop() -> E? {
-        lock.lock()
-        defer { lock.unlock() }
-        return queue.popFirst()
+        let ptr = mpscq_dequeue(&queue)
+        guard let ptr else {
+            return nil
+        }
+        let e = Unmanaged<E>.fromOpaque(ptr).takeRetainedValue()
+        return e
     }
 
     public var count: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return queue.count
+        return mpscq_count(&queue)
+    }
+
+    public func isEmpty() -> Bool { count == 0 }
+
+    deinit {
+        mpscq_destroy(&queue)
     }
 }

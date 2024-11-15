@@ -4,6 +4,9 @@ import PackageDescription
 
 let package = Package(
     name: "swift-vswitch",
+    platforms: [
+        .macOS(.v10_15),
+    ],
     products: [
         .executable(name: "swvs", targets: ["swvs"]),
         .library(name: "vproxy-common", targets: ["VProxyCommon"]),
@@ -13,6 +16,7 @@ let package = Package(
         .library(name: "swift-vswitch-ethfwd", targets: ["SwiftVSwitchEthFwd"]),
         .library(name: "swift-vswitch-netstack", targets: ["SwiftVSwitchNetStack"]),
         .library(name: "swift-vswitch-tuntap", targets: ["SwiftVSwitchTunTap"]),
+        .library(name: "swift-vswitch-controlplane", targets: ["SwiftVSwitchControlPlane"]),
         .executable(name: "sample-eventloop", targets: ["Sample_EventLoop"]),
         .executable(name: "sample-taptunping", targets: ["Sample_TapTunPing"]),
         .executable(name: "sample-vs", targets: ["Sample_VirtualServer"]),
@@ -21,6 +25,8 @@ let package = Package(
         .package(url: "https://github.com/davecom/SwiftPriorityQueue.git", revision: "1.4.0"),
         .package(url: "https://github.com/apple/swift-collections.git", revision: "1.1.4"),
         .package(url: "https://github.com/apple/swift-argument-parser", revision: "1.5.0"),
+        .package(url: "https://github.com/apple/swift-atomics", revision: "1.2.0"),
+        .package(url: "https://github.com/vapor/vapor", revision: "4.106.3"),
     ],
     targets: [
         // common utilities
@@ -28,13 +34,18 @@ let package = Package(
             name: "VProxyCommon",
             dependencies: [
                 "VProxyCommonCHelper",
+                "WaitfreeMpscQueue",
                 .product(name: "Collections", package: "swift-collections"),
             ]
         ),
         // event loop api
         .target(
             name: "SwiftEventLoopCommon",
-            dependencies: ["VProxyCommon", "SwiftPriorityQueue"]
+            dependencies: [
+                "VProxyCommon",
+                "SwiftPriorityQueue",
+                .product(name: "Atomics", package: "swift-atomics"),
+            ]
         ),
         // event loop posix
         .target(
@@ -83,12 +94,27 @@ let package = Package(
                 "SwiftVSwitch",
             ]
         ),
+        // control plane
+        .target(
+            name: "SwiftVSwitchControlPlane",
+            dependencies: [
+                "SwiftEventLoopCommon",
+                "SwiftVSwitch",
+                .product(name: "Vapor", package: "vapor"),
+            ]
+        ),
         // ---
         // executables
         // ...
         .executableTarget(
             name: "swvs",
-            dependencies: ["SwiftVSwitch", "SwiftEventLoopPosix"]
+            dependencies: [
+                "SwiftVSwitch",
+                "SwiftEventLoopPosix",
+                "SwiftVSwitchEthFwd",
+                "SwiftVSwitchNetStack",
+                "SwiftVSwitchControlPlane",
+            ]
         ),
         .executableTarget(
             name: "Sample_EventLoop",
@@ -144,6 +170,13 @@ let package = Package(
             path: "submodules/poptrie",
             cSettings: [
                 .unsafeFlags(["-Wall", "-Wno-shorten-64-to-32"]),
+            ]
+        ),
+        .target(
+            name: "WaitfreeMpscQueue",
+            path: "submodules/waitfree-mpsc-queue",
+            cSettings: [
+                .unsafeFlags(["-Wall", "-Wno-deprecated-pragma"]),
             ]
         ),
         // test cases

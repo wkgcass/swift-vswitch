@@ -12,3 +12,8 @@
 	path = submodules/poptrie
 	url = https://github.com/vproxy-tools/poptrie
 	branch = swift
+
+[submodule "submodules/waitfree-mpsc-queue"]
+	path = submodules/waitfree-mpsc-queue
+	url = https://github.com/vproxy-tools/waitfree-mpsc-queue
+	branch = swift

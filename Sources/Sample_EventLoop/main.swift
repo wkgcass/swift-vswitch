@@ -101,8 +101,8 @@ class Session {
     let active: any StreamFD
     let passive: any StreamFD
 
-    let readBuf = RingBuffer<UInt8>(capacity: 16384)
-    let sendBuf = RingBuffer<UInt8>(capacity: 16384)
+    let readBuf = RingBuffer<UInt8>(capacity: 16384, uninitialized: true)
+    let sendBuf = RingBuffer<UInt8>(capacity: 16384, uninitialized: true)
 
     init(active: any StreamFD, passive: any StreamFD) {
         self.active = active

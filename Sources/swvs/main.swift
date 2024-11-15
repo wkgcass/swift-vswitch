@@ -4,11 +4,18 @@ import Darwin
 import Glibc
 #endif
 
-func main() -> Int32 {
-    // TODO:
-    print("TODO")
-    return 1
-}
+import SwiftEventLoopCommon
+import SwiftEventLoopPosix
+import SwiftVSwitch
+import SwiftVSwitchControlPlane
+import SwiftVSwitchEthFwd
+import SwiftVSwitchNetStack
 
-let exitCode = main()
-exit(exitCode)
+PosixFDs.setup()
+
+let sw = try VSwitch(params: VSwitchParams(
+    ethsw: { EthernetFwdNodeManager() }, netstack: { NetstackNodeManager() }
+))
+
+let controlPlane = ControlPlane(sw)
+try await controlPlane.launch(unix: "/var/run/swvs.sock")

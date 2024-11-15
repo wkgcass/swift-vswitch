@@ -8,16 +8,17 @@ import SwiftEventLoopCommon
 import SwiftEventLoopPosix
 import SwiftVSwitch
 import SwiftVSwitchTunTapCHelper
+import VProxyChecksum
 import VProxyCommon
 
 public class TunIface: Iface, Hashable {
-    private let fd: TapTunFD
+    let fd: TapTunFD
     public let name: String
     private var ifaceInit_: IfaceInit? = nil
     public var ifaceInit: IfaceInit { ifaceInit_! }
     public var meta: IfaceMetadata
 
-    public static func open(dev: String) throws -> TunIface {
+    public static func open(dev: String) throws(IOException) -> TunIface {
         return try TunIface(fd: TapTunFD.openTun(dev: dev))
     }
 
@@ -28,7 +29,7 @@ public class TunIface: Iface, Hashable {
             property: IfaceProperty(layer: .IP),
             offload: IfaceOffload(
                 rxcsum: .UNNECESSARY,
-                txcsum: .NONE
+                txcsum: .COMPLETE
             ),
             initialMac: nil
         )
@@ -54,6 +55,7 @@ public class TunIface: Iface, Hashable {
             let buf = RawBufRef()
             var readOff = VSwitchReservedHeadroom
 #if os(Linux)
+            readOff -= MemoryLayout<virtio_net_hdr_v1>.stride
 #else
             readOff -= 4
 #endif
@@ -83,12 +85,36 @@ public class TunIface: Iface, Hashable {
             assert(Logger.lowLevelDebug("ip packet is not found"))
             return false
         }
+        if pkb.headroom < MemoryLayout<virtio_net_hdr_v1>.stride {
+            assert(Logger.lowLevelDebug("no enough headroom for virtio net hdr v1: \(pkb.headroom)"))
+            return false
+        }
+        let hdr: UnsafeMutablePointer<virtio_net_hdr_v1> =
+            Convert.ptr2mutUnsafe(pkb.raw.advanced(by: -MemoryLayout<virtio_net_hdr_v1>.stride))
+        memset(hdr, 0, MemoryLayout<virtio_net_hdr_v1>.stride)
+
         var pktlen = pkb.pktlen - (ipPkt - pkb.raw)
         let ver = (ipPkt.pointee >> 4) & 0xf
+#if os(Linux)
+        var out = vproxy_csum_out()
+        var err: Int32
+        if ver == 4 {
+            err = vproxy_pkt_ipv4_csum(Convert.ptr2mutUnsafe(ipPkt), Int32(pkb.pktlen), VPROXY_CSUM_IP | VPROXY_CSUM_UP_PSEUDO, &out)
+        } else {
+            err = vproxy_pkt_ipv6_csum(Convert.ptr2mutUnsafe(ipPkt), Int32(pkb.pktlen), VPROXY_CSUM_IP | VPROXY_CSUM_UP_PSEUDO, &out)
+        }
+        if err == 0 {
+            hdr.pointee.flags = UInt8(VIRTIO_NET_HDR_F_NEEDS_CSUM)
+            hdr.pointee.hdr_len = UInt16(pkb.pktlen - pkb.lengthFromAppToEnd)
+            hdr.pointee.csum_start = UInt16(Convert.ptr2ptrUnsafe(out.up_pos) - pkb.raw)
+            hdr.pointee.csum_offset = UInt16(out.up_csum_pos - out.up_pos)
+        }
+#endif
 
         var raw: UnsafeMutablePointer<UInt8>
 #if os(Linux)
-        raw = Convert.ptr2mutptr(ipPkt)
+        raw = Convert.ptr2mutptr(ipPkt).advanced(by: -MemoryLayout<virtio_net_hdr_v1>.stride)
+        pktlen += MemoryLayout<virtio_net_hdr_v1>.stride
 #else
         if ipPkt - pkb.raw + pkb.headroom < 4 {
             assert(Logger.lowLevelDebug("no enough room for af header"))
@@ -136,5 +162,25 @@ public class TunIface: Iface, Hashable {
 
     public static func == (lhs: TunIface, rhs: TunIface) -> Bool {
         return lhs.handle() == rhs.handle()
+    }
+}
+
+public class TunIfaceProvider: IfacePerThreadProvider {
+    private let devPattern: String
+    public init(dev devPattern: String) {
+        self.devPattern = devPattern
+    }
+
+    public private(set) var name = ""
+    private var devName = ""
+    public func provide(tid: Int) throws(IOException) -> (any Iface)? {
+        if tid == 1 {
+            let tun = try TunIface.open(dev: devPattern)
+            devName = tun.fd.dev
+            name = tun.name
+            return tun
+        } else {
+            return try TunIface.open(dev: devName)
+        }
     }
 }

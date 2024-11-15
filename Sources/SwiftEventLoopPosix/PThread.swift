@@ -8,6 +8,9 @@ let thread_entry_func: @convention(c) (_ p: UnsafeMutableRawPointer?) -> UnsafeM
     ctx.fds.setThreadLocal(retained.toOpaque())
     ctx.runnable()
     retained.release()
+    for um in ctx.thread.recorded {
+        um.release()
+    }
     return nil
 }
 
@@ -27,7 +30,7 @@ class PThread: Thread {
     private let fds: PosixFDs
     private let runnable: () -> Void
     private var thread = swvs_thread_t()
-    private var dict = [AnyHashable: Any]()
+    var recorded = [Unmanaged<AnyObject>]()
 
     private var loop_: SelectorEventLoop? = nil
 
@@ -56,12 +59,11 @@ class PThread: Thread {
 
     public let memPool = FixedSizeFixedCountSingleThreadMemPool(size: ThreadMemPoolArraySize, count: ThreadMemPoolCount)!
 
-    public func threadlocal(get key: AnyHashable) -> Any? {
-        return dict[key]
-    }
-
-    public func threadlocal(set key: AnyHashable, _ value: Any) {
-        dict[key] = value
+    public func releaseWhenThreadFinishes(_ obj: AnyObject) -> UnsafeMutableRawPointer {
+        let unmanaged = Unmanaged.passRetained(obj)
+        let ret = unmanaged.toOpaque()
+        recorded.append(unmanaged)
+        return ret
     }
 
     public func handle() -> ThreadHandle {

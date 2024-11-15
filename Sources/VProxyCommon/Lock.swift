@@ -5,19 +5,67 @@ import Glibc
 #endif
 
 public struct Lock {
-    private let lock_: [pthread_mutex_t] = Arrays.newArray(capacity: 1)
-    private let pointer: UnsafeMutablePointer<pthread_mutex_t>
+    private var lock_ = pthread_mutex_t()
 
     public init() {
-        pointer = Convert.ptr2mutUnsafe(Arrays.getRaw(from: lock_))
-        pthread_mutex_init(pointer, nil)
+        pthread_mutex_init(&lock_, nil)
     }
 
+    public mutating func lock() {
+        pthread_mutex_lock(&lock_)
+    }
+
+    public mutating func unlock() {
+        pthread_mutex_unlock(&lock_)
+    }
+}
+
+public struct RWLock {
+    private var lock_ = pthread_rwlock_t()
+
+    public init() {
+        pthread_rwlock_init(&lock_, nil)
+    }
+
+    public mutating func rlock() {
+        pthread_rwlock_rdlock(&lock_)
+    }
+
+    public mutating func wlock() {
+        pthread_rwlock_wrlock(&lock_)
+    }
+
+    public mutating func unlock() {
+        pthread_rwlock_unlock(&lock_)
+    }
+}
+
+public class LockRef {
+    private var lock_ = Lock()
+    public init() {}
+
     public func lock() {
-        pthread_mutex_lock(pointer)
+        lock_.lock()
     }
 
     public func unlock() {
-        pthread_mutex_unlock(pointer)
+        lock_.unlock()
+    }
+}
+
+public class RWLockRef {
+    private var lock_ = RWLock()
+    public init() {}
+
+    public func rlock() {
+        lock_.rlock()
+    }
+
+    public func wlock() {
+        lock_.wlock()
+    }
+
+    public func unlock() {
+        lock_.unlock()
     }
 }

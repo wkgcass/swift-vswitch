@@ -8,8 +8,6 @@ open class Node: CustomStringConvertible, Equatable, Hashable {
     public var offset = 0
     public var drop = NodeRef("drop")
     public var stolen = NodeRef("stolen")
-    private var nodeInit_: NodeInit? = nil
-    public var nodeInit: NodeInit { nodeInit_! }
 
     public init(name: String) {
         self.name = name
@@ -20,9 +18,7 @@ open class Node: CustomStringConvertible, Equatable, Hashable {
         mgr.initRef(&stolen)
     }
 
-    func initNode(nodeInit: NodeInit) {
-        nodeInit_ = nodeInit
-    }
+    func initNode(nodeInit _: NodeInit) {}
 
     public func schedule(_ sched: inout Scheduler) {
         if offset == 0 {
@@ -79,15 +75,13 @@ public struct UnownedPacketBuffer {
 }
 
 public struct Scheduler {
-    private unowned var drop: DropNode
-    private unowned var stolen: StolenNode
-    private unowned var devOutput: DevOutput
+    public let sw: VSwitchPerThread.VSwitchHelper
+    public let mgr: NodeManager
     private var nextNodes = Set<Node>()
 
-    init(mgr: NodeManager, _ initialNodes: Node...) {
-        drop = mgr.drop
-        stolen = mgr.stolen
-        devOutput = mgr.devOutput
+    init(sw: VSwitchPerThread.VSwitchHelper, mgr: NodeManager, _ initialNodes: Node...) {
+        self.sw = sw
+        self.mgr = mgr
         for n in initialNodes {
             nextNodes.insert(n)
         }
@@ -95,7 +89,7 @@ public struct Scheduler {
 
     public mutating func schedule(_ pkb: PacketBuffer, to: NodeRef) {
         let node = to.node
-        if node == devOutput || node == drop || node == stolen {
+        if node == mgr.devOutput || node == mgr.drop || node == mgr.stolen {
             _ = node.enqueue(pkb)
             return
         }
@@ -104,7 +98,7 @@ public struct Scheduler {
             nextNodes.insert(node)
         } else {
             assert(Logger.lowLevelDebug("schedule \(Unmanaged.passUnretained(pkb).toOpaque()) to \(node.name) failed, drop now"))
-            _ = drop.enqueue(pkb)
+            _ = mgr.drop.enqueue(pkb)
         }
     }
 
@@ -118,6 +112,18 @@ public struct Scheduler {
             n.schedule(&self)
         }
         return !nextNodes.isEmpty
+    }
+
+    mutating func addRedirected(_ pkb: PacketBuffer) -> Bool {
+        assert(pkb.conn != nil)
+        let conn = pkb.conn!
+        let ok = conn.nextNode.node.enqueue(pkb)
+        if ok {
+            nextNodes.insert(conn.nextNode.node)
+        } else {
+            assert(Logger.lowLevelDebug("unable to redirect the packet: failed to enqueue to node \(conn.nextNode.name)"))
+        }
+        return ok
     }
 }
 
@@ -176,6 +182,10 @@ open class NodeManager {
             n.initNode(nodeInit: nodeInit)
         }
     }
+
+    public func getNodeBy(name: String) -> Node? {
+        return storage[name]
+    }
 }
 
 public class DummyNodeManager: NodeManager {
@@ -199,9 +209,7 @@ public class DummyNetStackNodeManager: NetStackNodeManager {
     }
 }
 
-public struct NodeInit {
-    public let sw: VSwitch.VSwitchHelper
-}
+public struct NodeInit {}
 
 open class DevInput: Node {
     public init() {
@@ -219,6 +227,7 @@ open class DevInput: Node {
         iface.meta.statistics.rxpkts += 1
 
         if csumDrop(pkb) {
+            assert(Logger.lowLevelDebug("csum dropped"))
             iface.meta.statistics.rxerrcsum += 1
             return sched.schedule(pkb, to: drop)
         }

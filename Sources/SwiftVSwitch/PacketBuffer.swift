@@ -25,7 +25,7 @@ public class PacketBuffer: CustomStringConvertible {
     public unowned var outputIface: IfaceEx? = nil
     public var outputRouteRule: RouteTable.RouteRule? = nil
 
-    private var buf: BufRef
+    public private(set) var buf: BufRef
     public private(set) var raw: UnsafePointer<UInt8> // pointer to the packet
     public var pktlen: Int
     public private(set) var headroom: Int
@@ -329,7 +329,7 @@ public class PacketBuffer: CustomStringConvertible {
                                               uninitialized: true))
         }
         raw = buf.raw().advanced(by: other.headroom)
-        memcpy(Convert.ptr2mutptr(buf.raw().advanced(by: -other.headroom)),
+        memcpy(Convert.ptr2mutptr(buf.raw()),
                other.raw.advanced(by: -other.headroom),
                other.headroom + other.pktlen + other.tailroom)
 
@@ -1046,6 +1046,17 @@ public class PacketBuffer: CustomStringConvertible {
     }
 }
 
+public class PacketBufferForRedirecting {
+    public let pkb: PacketBuffer
+    public var netstack: UInt32
+    public var inputIface: String
+    init(_ pkb: PacketBuffer) {
+        self.pkb = pkb
+        netstack = pkb.netstack!.id
+        inputIface = pkb.inputIface!.name
+    }
+}
+
 public enum PacketInfoLevel: UInt8 {
     case ETHER
     case VLAN
@@ -1089,6 +1100,10 @@ open class BufRef {
         return UnsafePointer(bitPattern: 0)!
     }
 
+    open func shareable() -> Bool {
+        return false
+    }
+
     open func doDeinit() {}
 
     deinit {
@@ -1105,6 +1120,10 @@ public class ArrayBufRef: BufRef {
 
     override public func raw() -> UnsafePointer<UInt8> {
         return Convert.mut2ptr(Arrays.getRaw(from: array))
+    }
+
+    override public func shareable() -> Bool {
+        return true
     }
 }
 
@@ -1126,6 +1145,10 @@ public class RawBufRef: BufRef {
 
     override public func raw() -> UnsafePointer<UInt8> {
         return raw_
+    }
+
+    override public func shareable() -> Bool {
+        return index == -1
     }
 
     override public func doDeinit() {

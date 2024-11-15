@@ -4,6 +4,7 @@ import SwiftVSwitchVirtualServerBase
 import VProxyCommon
 
 public class NetStack {
+    public let id: UInt32
     private let loop: SelectorEventLoop
     private let params: VSwitchParams
 
@@ -16,12 +17,13 @@ public class NetStack {
     public private(set) var dev2ipv4 = [IfaceHandle: Set<IPv4>]()
     public private(set) var dev2ipv6 = [IfaceHandle: Set<IPv6>]()
 
-    init(loop: SelectorEventLoop, params: VSwitchParams) {
-        self.loop = loop
+    init(id: UInt32, sw: VSwitchPerThread, params: VSwitchParams, shared: NetStackShared) {
+        self.id = id
+        loop = sw.loop
         self.params = params
         arpTable = ArpTable(loop: loop, params: params)
         routeTable = RouteTable()!
-        conntrack = Conntrack()
+        conntrack = Conntrack(sw: sw, global: shared.globalConntrack)
         ipvs = IPVS()
     }
 
@@ -157,4 +159,8 @@ public class NetStack {
             )
         }
     }
+}
+
+public struct NetStackShared {
+    public let globalConntrack: GlobalConntrack
 }

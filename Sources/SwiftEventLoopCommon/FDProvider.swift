@@ -2,7 +2,7 @@ import VProxyCommon
 
 public class FDProvider {
     private nonisolated(unsafe) static var fds: FDs?
-    private nonisolated(unsafe) static let lock = Lock()
+    private nonisolated(unsafe) static var lock = Lock()
 
     public static func get() -> FDs {
         return fds!
@@ -60,8 +60,7 @@ public protocol Thread: AnyObject {
     func getLoop() -> SelectorEventLoop?
     var memPool: FixedSizeFixedCountSingleThreadMemPool { get }
 
-    func threadlocal(get key: AnyHashable) -> Any?
-    func threadlocal(set key: AnyHashable, _ value: Any)
+    func releaseWhenThreadFinishes(_ obj: AnyObject) -> UnsafeMutableRawPointer
 
     func handle() -> ThreadHandle
 }
@@ -74,4 +73,20 @@ public class ThreadHandle: Equatable {
     }
 }
 
-public typealias Runnable = () throws -> Void
+open class Runnable {
+    open func run() throws {}
+    public static func wrap(_ f: @escaping RunnableFunc) -> Runnable { RunnableFuncWrap(f) }
+}
+
+class RunnableFuncWrap: Runnable {
+    private let f: RunnableFunc
+    init(_ f: @escaping RunnableFunc) {
+        self.f = f
+    }
+
+    override public func run() throws {
+        try f()
+    }
+}
+
+public typealias RunnableFunc = () throws -> Void

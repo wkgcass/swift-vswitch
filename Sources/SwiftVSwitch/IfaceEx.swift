@@ -3,16 +3,20 @@ import VProxyCommon
 public class IfaceEx: CustomStringConvertible, Hashable {
     public let iface: any Iface
 
-    public init(_ iface: any Iface, toBridge: UInt32) {
-        self.iface = iface
-        self.toBridge = toBridge
-        mac = iface.meta.initialMac ?? MacAddress.random()
+    public convenience init(_ iface: any Iface, toBridge: UInt32) {
+        self.init(iface, params: IfaceExParams(), toBridge: toBridge)
     }
 
-    public init(_ iface: any Iface, toNetstack: UInt32) {
+    public init(_ iface: any Iface, params: IfaceExParams, toBridge: UInt32) {
+        self.iface = iface
+        self.toBridge = toBridge
+        mac = iface.meta.initialMac ?? params.mac
+    }
+
+    public init(_ iface: any Iface, params: IfaceExParams, toNetstack: UInt32) {
         self.iface = iface
         self.toNetstack = toNetstack
-        mac = iface.meta.initialMac ?? MacAddress.random()
+        mac = iface.meta.initialMac ?? params.mac
     }
 
     public var name: String { iface.name }
@@ -57,5 +61,83 @@ public class IfaceEx: CustomStringConvertible, Hashable {
 
     public static func == (lhs: IfaceEx, rhs: IfaceEx) -> Bool {
         return lhs.iface.handle() == rhs.iface.handle()
+    }
+}
+
+public struct IfaceExParams {
+    public var mac: MacAddress
+    public init(mac: MacAddress) {
+        self.mac = mac
+    }
+
+    public init() {
+        mac = MacAddress.random()
+    }
+}
+
+public protocol IfacePerThreadProvider {
+    mutating func provide(tid: Int) throws(IOException) -> (any Iface)?
+}
+
+public struct SingleThreadIfaceProvider: IfacePerThreadProvider {
+    public var iface: any Iface
+    public init(iface: any Iface) {
+        self.iface = iface
+    }
+
+    public func provide(tid: Int) -> (any Iface)? {
+        if tid == 1 {
+            return iface
+        }
+        return nil
+    }
+}
+
+public struct PrototypeIfaceProvider: IfacePerThreadProvider {
+    public let supplier: () throws(IOException) -> any Iface
+    public init(supplier: @escaping () throws(IOException) -> any Iface) {
+        self.supplier = supplier
+    }
+
+    public func provide(tid _: Int) throws(IOException) -> (any Iface)? {
+        return try supplier()
+    }
+}
+
+public class DummyIface: Iface {
+    public var name: String
+    public var meta: IfaceMetadata
+
+    init(name: String, meta: IfaceMetadata) {
+        self.name = name
+        self.meta = meta
+    }
+
+    public func initialize(_: IfaceInit) throws(VProxyCommon.IOException) {}
+
+    public func close() {
+        handle_ = nil
+    }
+
+    public func dequeue(_: inout [PacketBuffer], off _: inout Int) {}
+
+    public func enqueue(_: PacketBuffer) -> Bool { false }
+
+    public func completeTx() {}
+
+    private var handle_: IfaceHandle? = nil
+    public func handle() -> IfaceHandle {
+        if handle_ == nil {
+            handle_ = IfaceHandle(iface: self)
+        }
+        return handle_!
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        ObjectIdentifier(self).hash(into: &hasher)
+    }
+
+    public static func == (lhs: DummyIface, rhs: DummyIface) -> Bool {
+        return lhs === rhs
     }
 }

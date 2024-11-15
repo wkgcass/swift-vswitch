@@ -15,6 +15,7 @@ struct TapTunPingSample: ParsableCommand {
     @Option(help: "Device name or pattern.") var devName: String
     @Option(help: "(IP/Mask)s separated by `,`.") var ipmask: String
     @Option(help: "Choose to use mimic or stack.") var netType: String
+    @Option(help: "Core affinity, which is a list of bitmasks separated by `,`.") var coreAffinity: String?
 
     func validate() throws {
         if type != "tap" && type != "tun" {
@@ -29,6 +30,15 @@ struct TapTunPingSample: ParsableCommand {
                 throw ValidationError("ipmask[\(idx)]=\(ipmaskStr) is not a valid ip/mask")
             }
         }
+        if let coreAffinity {
+            let coreAffinitySplit = coreAffinity.split(separator: ",")
+            for (idx, coreAffinity) in coreAffinitySplit.enumerated() {
+                let n = Int64(coreAffinity)
+                if n == nil {
+                    throw ValidationError("core-affinity[\(idx)]=\(coreAffinity) is not a valid integer")
+                }
+            }
+        }
     }
 
     func run() throws {
@@ -41,53 +51,69 @@ struct TapTunPingSample: ParsableCommand {
             ipmasks[idx] = GetIPMask(from: String(ipmaskStr))!
         }
 
-        let loop = try SelectorEventLoop.open()
-        let thread = FDProvider.get().newThread { loop.loop() }
-        thread.start()
+        var params = VSwitchParams(
+            ethsw: { EthernetFwdNodeManager() },
+            netstack: { NetstackNodeManager() }
+        )
 
-        let vs = VSwitch(loop: loop, params: VSwitchParams(
-            ethsw: EthernetFwdNodeManager(),
-            netstack: NetstackNodeManager()
-        ))
-        vs.start()
+        var coreAffinity = [Int64]()
+        if let affinity = self.coreAffinity {
+            for s in affinity.split(separator: ",") {
+                coreAffinity.append(Int64(s)!)
+            }
+        }
+        if !coreAffinity.isEmpty {
+            params.coreAffinityMasksForEveryThreads = coreAffinity
+        }
+
+        let sw = try VSwitch(params: params)
+        sw.start()
 
         if netType == "mimic" {
-            vs.ensureBridge(id: 1)
-            let mimic = SimpleHostMimicIface(name: "sample")
-            for ipmask in ipmasks {
-                mimic.add(ip: ipmask!.ip)
+            sw.configure { _, sw in sw.ensureBridge(id: 1) }
+            let ifprovider = PrototypeIfaceProvider {
+                let mimic = SimpleHostMimicIface(name: "sample")
+                for ipmask in ipmasks {
+                    mimic.add(ip: ipmask!.ip)
+                }
+                return mimic
             }
-            try vs.register(iface: mimic, bridge: 1)
+            try sw.register(ifprovider, bridge: 1)
         } else {
-            vs.ensureNetstack(id: 1)
+            sw.ensureNetstack(id: 1)
         }
 
         if isTun {
-            let tun = try TunIface.open(dev: devName)
+            let tun = TunIfaceProvider(dev: devName)
             if netType == "mimic" {
                 print("Cannot use type=tun with net-type=mimic.")
-                return
+                OS.exit(code: 1)
             } else {
-                try vs.register(iface: tun, netstack: 1)
+                try sw.register(tun, netstack: 1)
                 for ipmask in ipmasks {
-                    vs.addAddress(ipmask!.ip, dev: tun.name)
-                    vs.addRoute(ipmask!.network, dev: tun.name, src: ipmask!.ip)
+                    sw.configure { _, sw in
+                        sw.addAddress(ipmask!.ip, dev: tun.name)
+                        sw.addRoute(ipmask!.network, dev: tun.name, src: ipmask!.ip)
+                    }
                 }
             }
         } else {
-            let tap = try TapIface.open(dev: devName)
+            let tap = TapIfaceProvider(dev: devName)
             if netType == "mimic" {
-                try vs.register(iface: tap, bridge: 1)
+                try sw.register(tap, bridge: 1)
             } else {
-                try vs.register(iface: tap, netstack: 1)
+                try sw.register(tap, netstack: 1)
                 for ipmask in ipmasks {
-                    vs.addAddress(ipmask!.ip, dev: tap.name)
-                    vs.addRoute(ipmask!.network, dev: tap.name, src: ipmask!.ip)
+                    sw.configure { _, sw in
+                        sw.addAddress(ipmask!.ip, dev: tap.name)
+                        sw.addRoute(ipmask!.network, dev: tap.name, src: ipmask!.ip)
+                    }
                 }
             }
         }
+
         Logger.alert("sample-taptunping started")
-        thread.join()
+        sw.joinMasterThread()
     }
 }
 

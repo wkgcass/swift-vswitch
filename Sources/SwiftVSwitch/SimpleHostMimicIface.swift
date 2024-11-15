@@ -42,7 +42,7 @@ public class SimpleHostMimicIface: VirtualIface {
         pkb.outputIface = nil
         let dstMac = MacAddress(raw: &ether.pointee.dst)
         if dstMac != ifMac && dstMac.isUnicast() {
-            assert(Logger.lowLevelDebug("the packet is not for \(name)"))
+            assert(Logger.lowLevelDebug("the packet is not for \(name): dst=\(dstMac)"))
             return false
         }
 

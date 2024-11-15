@@ -42,7 +42,8 @@ int swvs_open_tap(const char* dev_chars, uint8_t is_tun, struct swvs_tap_info* r
     } else {
         ifr.ifr_flags |= IFF_TAP;
     }
-    ifr.ifr_flags |= IFF_NO_PI;
+    ifr.ifr_flags |= IFF_NO_PI | IFF_VNET_HDR | IFF_MULTI_QUEUE;
+
     strncpy(ifr.ifr_name, dev_chars, IFNAMSIZ);
     ifr.ifr_name[IFNAMSIZ-1] = '\0';
 
@@ -52,6 +53,15 @@ int swvs_open_tap(const char* dev_chars, uint8_t is_tun, struct swvs_tap_info* r
 
     strncpy(ret->dev_name, ifr.ifr_name, IFNAMSIZ);
     ret->dev_name[IFNAMSIZ-1] = '\0';
+
+    int len = sizeof(struct virtio_net_hdr_v1);
+    if (ioctl(fd, TUNSETVNETHDRSZ, &len)) {
+        goto fail;
+    }
+    unsigned off_flags = TUN_F_CSUM;
+    if (ioctl(fd, TUNSETOFFLOAD, off_flags)) {
+        goto fail;
+    }
 // end ifdef __linux__
 #elif defined(__APPLE__)
     if (!is_tun) {

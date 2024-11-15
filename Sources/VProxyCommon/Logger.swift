@@ -1,3 +1,8 @@
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
 import VProxyCommonCHelper
 
 public class Logger {
@@ -16,8 +21,13 @@ public class Logger {
         return String(cString: &buf)
     }
 
+    private static func threadIdentifier() -> Int {
+        let curr = pthread_self()
+        return Int(bitPattern: curr)
+    }
+
     public static func lowLevelDebug(_ msg: String) -> Bool {
-        print("\(DEBUG)[\(currentTime())][DEBUG] -\(RESET) \(msg)")
+        print("\(DEBUG)[\(currentTime())][DEBUG] - \(threadIdentifier()) -\(RESET) \(msg)")
         return true
     }
 

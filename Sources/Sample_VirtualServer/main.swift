@@ -16,7 +16,7 @@ struct VirtualServerSample: ParsableCommand {
     @Option(help: "(IP/Mask)s separated by `,`.") var vip: String
     @Option(help: "Port for the virtual server.") var port: UInt16
     @Option(help: "Dest (ip:port{weight})s separated by `,`.") var dest: String
-    @Option(help: "Core affinity, which is a bitmask.") var coreAffinity: Int64?
+    @Option(help: "Core affinity, which is a list of bitmasks separated by `,`.") var coreAffinity: String?
 
     func validate() throws {
         if type != "tap" && type != "tun" {
@@ -49,6 +49,15 @@ struct VirtualServerSample: ParsableCommand {
                 throw ValidationError("dest[\(idx)]=\(ipportweight) doesn't contain valid weight: \(weightStr)")
             }
         }
+        if let coreAffinity {
+            let coreAffinitySplit = coreAffinity.split(separator: ",")
+            for (idx, coreAffinity) in coreAffinitySplit.enumerated() {
+                let n = Int64(coreAffinity)
+                if n == nil {
+                    throw ValidationError("core-affinity[\(idx)]=\(coreAffinity) is not a valid integer")
+                }
+            }
+        }
     }
 
     func run() throws {
@@ -75,21 +84,26 @@ struct VirtualServerSample: ParsableCommand {
             dests[idx] = (ipport, weight)
         }
 
-        var opts = SelectorOptions()
-        if let coreAffinity {
-            opts.coreAffinity = coreAffinity
-        }
-        let loop = try SelectorEventLoop.open(opts: opts)
-        let thread = FDProvider.get().newThread { loop.loop() }
-        thread.start()
+        var params = VSwitchParams(
+            ethsw: { DummyNodeManager() },
+            netstack: { NetstackNodeManager() }
+        )
 
-        let sw = VSwitch(loop: loop, params: VSwitchParams(
-            ethsw: DummyNodeManager(),
-            netstack: NetstackNodeManager()
-        ))
+        var coreAffinity = [Int64]()
+        if let affinity = self.coreAffinity {
+            for s in affinity.split(separator: ",") {
+                coreAffinity.append(Int64(s)!)
+            }
+        }
+        if !coreAffinity.isEmpty {
+            params.coreAffinityMasksForEveryThreads = coreAffinity
+        }
+
+        let sw = try VSwitch(params: params)
         sw.start()
+
         sw.ensureNetstack(id: 1)
-        loop.runOnLoop {
+        sw.configure { _, sw in
             let netstack = sw.netstacks[1]!
             for vipmask in vips {
                 for proto in [IP_PROTOCOL_TCP, IP_PROTOCOL_UDP] {
@@ -113,22 +127,27 @@ struct VirtualServerSample: ParsableCommand {
         }
 
         if isTun {
-            let tun = try TunIface.open(dev: devName)
-            try sw.register(iface: tun, netstack: 1)
+            let tun = TunIfaceProvider(dev: devName)
+            try sw.register(tun, netstack: 1)
             for vipmask in vips {
-                sw.addAddress(vipmask!.ip, dev: tun.name)
-                sw.addRoute(vipmask!.network, dev: tun.name, src: vipmask!.ip)
+                sw.configure { _, sw in
+                    sw.addAddress(vipmask!.ip, dev: tun.name)
+                    sw.addRoute(vipmask!.network, dev: tun.name, src: vipmask!.ip)
+                }
             }
         } else {
-            let tap = try TapIface.open(dev: devName)
-            try sw.register(iface: tap, netstack: 1)
+            let tap = TapIfaceProvider(dev: devName)
+            try sw.register(tap, netstack: 1)
             for vipmask in vips {
-                sw.addAddress(vipmask!.ip, dev: tap.name)
-                sw.addRoute(vipmask!.network, dev: tap.name, src: vipmask!.ip)
+                sw.configure { _, sw in
+                    sw.addAddress(vipmask!.ip, dev: tap.name)
+                    sw.addRoute(vipmask!.network, dev: tap.name, src: vipmask!.ip)
+                }
             }
         }
+
         Logger.alert("sample-vs started")
-        thread.join()
+        sw.joinMasterThread()
     }
 }
 

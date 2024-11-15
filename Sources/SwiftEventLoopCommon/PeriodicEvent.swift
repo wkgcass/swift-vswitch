@@ -7,7 +7,7 @@ public class PeriodicEvent {
     private var running = false
     private var te: TimerEvent?
 
-    init(runnable: @escaping Runnable, loop: SelectorEventLoop, intervalMillis: Int) {
+    init(runnable: Runnable, loop: SelectorEventLoop, intervalMillis: Int) {
         self.runnable = runnable
         self.loop = loop
         delay = intervalMillis
@@ -23,7 +23,7 @@ public class PeriodicEvent {
     private func run() {
         if running {
             do {
-                try runnable()
+                try runnable.run()
             } catch {
                 Logger.error(.IMPROPER_USE, "error thrown in periodic event")
             }

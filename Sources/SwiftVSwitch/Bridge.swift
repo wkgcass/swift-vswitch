@@ -1,9 +1,11 @@
 import SwiftEventLoopCommon
 
 public class Bridge {
+    public let id: UInt32
     public let macTable: MacTable
 
-    init(loop: SelectorEventLoop, params: VSwitchParams) {
+    init(id: UInt32, loop: SelectorEventLoop, params: VSwitchParams) {
+        self.id = id
         macTable = MacTable(loop: loop, params: params)
     }
 

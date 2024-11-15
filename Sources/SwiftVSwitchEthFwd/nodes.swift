@@ -54,15 +54,21 @@ class EthernetInput: Node {
             return sched.schedule(pkb, to: vlanInput)
         }
 
-        guard let bridge = nodeInit.sw.bridges[pkb.inputIface!.toBridge] else {
-            assert(Logger.lowLevelDebug("bridge not present in pkb"))
+        guard let bridge = sched.sw.bridges[pkb.inputIface!.toBridge] else {
+            assert(Logger.lowLevelDebug("bridge not found \(pkb.inputIface!.toBridge)"))
             return sched.schedule(pkb, to: drop)
         }
         pkb.bridge = bridge
 
         let dstmac = pkb.dstmac!
         let srcmac = pkb.srcmac!
-        bridge.macTable.record(mac: srcmac, iface: pkb.inputIface!)
+        let bridgeId = bridge.id
+        let ifname = pkb.inputIface!.name
+        sched.sw.foreachWorker { sw in
+            if let bridge = sw.bridges[bridgeId], let inputIface = sw.ifaces[ifname] {
+                bridge.macTable.record(mac: srcmac, iface: inputIface)
+            }
+        }
 
         if dstmac.isBroadcast() {
             return sched.schedule(pkb, to: broadcastInput)
@@ -139,7 +145,7 @@ class BroadcastOutput: Node {
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
-        nodeInit.sw.foreachIface(in: pkb.bridge!) { iface in
+        sched.sw.foreachIface(in: pkb.bridge!) { iface in
             if iface.handle() == pkb.inputIface!.handle() {
                 return
             }
