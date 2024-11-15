@@ -77,7 +77,7 @@ class IPVSConnCreate: Node {
 
     private func canCreateConn(_ pkb: PacketBuffer) -> Bool {
         if pkb.proto == IP_PROTOCOL_TCP {
-            let tcp: UnsafeMutablePointer<swvs_tcphdr> = Convert.ptr2mutUnsafe(pkb.upper!)
+            let tcp: UnsafeMutablePointer<swvs_tcphdr> = Unsafe.ptr2mutUnsafe(pkb.upper!)
             if tcp.pointee.flags != TCP_FLAGS_SYN {
                 // only syn can establish a new connection
                 return false

@@ -7,7 +7,7 @@ public struct MacAddress: CustomStringConvertible, Equatable, Hashable {
     public let bytes: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8)
 
     public init(raw: UnsafeRawPointer) {
-        let p: UnsafePointer<UInt8> = Convert.raw2ptr(raw)
+        let p: UnsafePointer<UInt8> = Unsafe.raw2ptr(raw)
         bytes = (p.pointee, p.advanced(by: 1).pointee, p.advanced(by: 2).pointee,
                  p.advanced(by: 3).pointee, p.advanced(by: 4).pointee, p.advanced(by: 5).pointee)
     }
@@ -35,7 +35,7 @@ public struct MacAddress: CustomStringConvertible, Equatable, Hashable {
     }
 
     public func copyInto(_ p: UnsafeMutableRawPointer) {
-        let u: UnsafeMutablePointer<UInt8> = Convert.mutraw2mutptr(p)
+        let u: UnsafeMutablePointer<UInt8> = Unsafe.mutraw2mutptr(p)
         u.pointee = bytes.0
         u.advanced(by: 1).pointee = bytes.1
         u.advanced(by: 2).pointee = bytes.2

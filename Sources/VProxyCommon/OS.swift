@@ -3,6 +3,7 @@ import Darwin
 #else
 import Glibc
 #endif
+import VProxyCommonCHelper
 
 let globalExit = exit
 
@@ -21,5 +22,9 @@ public class OS {
 
     public static func exit(code: Int32) {
         globalExit(code)
+    }
+
+    public static func gettid() -> UInt64 {
+        return swvs_get_tid()
     }
 }

@@ -1,38 +1,11 @@
-public class Convert {
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
+
+public class Unsafe {
     private init() {}
-
-    @inlinable @inline(__always)
-    public static func reverseByteOrder(_ n: UInt16) -> UInt16 {
-        return ((n >> 8) & 0xff) | ((n & 0xff) << 8)
-    }
-
-    @inline(__always)
-    private static func hexCharToByte(_ c: CChar) -> UInt8 {
-        if c >= 48 && c <= 57 {
-            return UInt8(c) - 48
-        } else if c >= 65 && c <= 70 {
-            return UInt8(c) - 55
-        } else if c >= 97 && c <= 102 {
-            return UInt8(c) - 87
-        } else { // should not reach here
-            return 255
-        }
-    }
-
-    public static func toBytes(fromhex hexString: String) -> [UInt8]? {
-        let utf8 = hexString.utf8CString
-        if (utf8.count - 1) % 2 != 0 {
-            return nil
-        }
-        let size = (utf8.count - 1) / 2
-        var result: [UInt8] = Arrays.newArray(capacity: size, uninitialized: true)
-        for i in 0 ..< size {
-            let high = utf8[2 * i]
-            let low = utf8[2 * i + 1]
-            result[i] = (hexCharToByte(high) << 4) | hexCharToByte(low)
-        }
-        return result
-    }
 
     @inlinable @inline(__always)
     public static func raw2ptr<T>(_ raw: UnsafeRawPointer) -> UnsafePointer<T> {
@@ -118,13 +91,63 @@ public class Convert {
 
     @inlinable @inline(__always)
     public static func advance<T>(mut p: UnsafeMutablePointer<T>, inc: Int) -> UnsafeMutablePointer<T> {
-        let u8p: UnsafeMutablePointer<UInt8> = Convert.mut2mutUnsafe(p)
-        return Convert.mut2mutUnsafe(u8p.advanced(by: inc))
+        let u8p: UnsafeMutablePointer<UInt8> = mut2mutUnsafe(p)
+        return mut2mutUnsafe(u8p.advanced(by: inc))
     }
 
     @inlinable @inline(__always)
     public static func advance<T>(ptr p: UnsafePointer<T>, inc: Int) -> UnsafePointer<T> {
-        let u8p: UnsafePointer<UInt8> = Convert.ptr2ptrUnsafe(p)
-        return Convert.ptr2ptrUnsafe(u8p.advanced(by: inc))
+        let u8p: UnsafePointer<UInt8> = ptr2ptrUnsafe(p)
+        return ptr2ptrUnsafe(u8p.advanced(by: inc))
+    }
+
+    @inlinable @inline(__always)
+    public static func convertToNativeAddRef<T: AnyObject>(_ value: T) -> UnsafeMutableRawPointer {
+        return Unmanaged<T>.passRetained(value).toOpaque()
+    }
+
+    @inlinable @inline(__always)
+    public static func converToNativeKeepRef<T: AnyObject>(_ value: T) -> UnsafeMutableRawPointer {
+        return Unmanaged<T>.passUnretained(value).toOpaque()
+    }
+
+    @inlinable @inline(__always)
+    public static func convertFromNativeDecRef<T: AnyObject>(_ p: UnsafeRawPointer) -> T {
+        return Unmanaged<T>.fromOpaque(p).takeRetainedValue()
+    }
+
+    @inlinable @inline(__always)
+    public static func convertFromNativeKeepRef<T: AnyObject>(_ p: UnsafeRawPointer) -> T {
+        return Unmanaged<T>.fromOpaque(p).takeUnretainedValue()
+    }
+
+    @inlinable @inline(__always)
+    public static func releaseNativeRef(_ p: UnsafeRawPointer) {
+        Unmanaged<AnyObject>.fromOpaque(p).release()
+    }
+
+    @inlinable @inline(__always)
+    public static func malloc<T>() -> UnsafeMutablePointer<T>? {
+#if canImport(Darwin)
+        let p = Darwin.malloc(MemoryLayout<T>.stride)
+#else
+        let p = Glibc.malloc(MemoryLayout<T>.stride)
+#endif
+        guard let p else {
+            return nil
+        }
+        return mutraw2mutptr(p)
+    }
+
+    @inlinable @inline(__always)
+    public static func free<T>(_ p: UnsafePointer<T>?) {
+        guard let p else {
+            return
+        }
+#if canImport(Darwin)
+        Darwin.free(ptr2mutraw(p))
+#else
+        Glibc.free(ptr2mutraw(p))
+#endif
     }
 }

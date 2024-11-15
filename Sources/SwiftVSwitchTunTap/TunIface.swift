@@ -25,11 +25,17 @@ public class TunIface: Iface, Hashable {
     private init(fd: TapTunFD) {
         self.fd = fd
         name = "tun:\(fd.dev)"
+        let txcsum: CSumState
+#if canImport(Darwin)
+        txcsum = .NONE
+#else
+        txcsum = .COMPLETE
+#endif
         meta = IfaceMetadata(
             property: IfaceProperty(layer: .IP),
             offload: IfaceOffload(
                 rxcsum: .UNNECESSARY,
-                txcsum: .COMPLETE
+                txcsum: txcsum
             ),
             initialMac: nil
         )
@@ -61,7 +67,7 @@ public class TunIface: Iface, Hashable {
 #endif
             let n: Int
             do {
-                n = try fd.read(Convert.ptr2mutptr(buf.raw()).advanced(by: readOff), len: VSwitchDefaultPacketBufferSize - readOff)
+                n = try fd.read(Unsafe.ptr2mutptr(buf.raw()).advanced(by: readOff), len: VSwitchDefaultPacketBufferSize - readOff)
             } catch {
                 Logger.error(.SOCKET_ERROR, "failed to read packet from \(fd)", error)
                 break
@@ -90,7 +96,7 @@ public class TunIface: Iface, Hashable {
             return false
         }
         let hdr: UnsafeMutablePointer<virtio_net_hdr_v1> =
-            Convert.ptr2mutUnsafe(pkb.raw.advanced(by: -MemoryLayout<virtio_net_hdr_v1>.stride))
+            Unsafe.ptr2mutUnsafe(pkb.raw.advanced(by: -MemoryLayout<virtio_net_hdr_v1>.stride))
         memset(hdr, 0, MemoryLayout<virtio_net_hdr_v1>.stride)
 
         var pktlen = pkb.pktlen - (ipPkt - pkb.raw)
@@ -99,28 +105,28 @@ public class TunIface: Iface, Hashable {
         var out = vproxy_csum_out()
         var err: Int32
         if ver == 4 {
-            err = vproxy_pkt_ipv4_csum(Convert.ptr2mutUnsafe(ipPkt), Int32(pkb.pktlen), VPROXY_CSUM_IP | VPROXY_CSUM_UP_PSEUDO, &out)
+            err = vproxy_pkt_ipv4_csum(Unsafe.ptr2mutUnsafe(ipPkt), Int32(pkb.pktlen), VPROXY_CSUM_IP | VPROXY_CSUM_UP_PSEUDO, &out)
         } else {
-            err = vproxy_pkt_ipv6_csum(Convert.ptr2mutUnsafe(ipPkt), Int32(pkb.pktlen), VPROXY_CSUM_IP | VPROXY_CSUM_UP_PSEUDO, &out)
+            err = vproxy_pkt_ipv6_csum(Unsafe.ptr2mutUnsafe(ipPkt), Int32(pkb.pktlen), VPROXY_CSUM_IP | VPROXY_CSUM_UP_PSEUDO, &out)
         }
         if err == 0 {
             hdr.pointee.flags = UInt8(VIRTIO_NET_HDR_F_NEEDS_CSUM)
             hdr.pointee.hdr_len = UInt16(pkb.pktlen - pkb.lengthFromAppToEnd)
-            hdr.pointee.csum_start = UInt16(Convert.ptr2ptrUnsafe(out.up_pos) - pkb.raw)
+            hdr.pointee.csum_start = UInt16(Unsafe.ptr2ptrUnsafe(out.up_pos) - pkb.raw)
             hdr.pointee.csum_offset = UInt16(out.up_csum_pos - out.up_pos)
         }
 #endif
 
         var raw: UnsafeMutablePointer<UInt8>
 #if os(Linux)
-        raw = Convert.ptr2mutptr(ipPkt).advanced(by: -MemoryLayout<virtio_net_hdr_v1>.stride)
+        raw = Unsafe.ptr2mutptr(ipPkt).advanced(by: -MemoryLayout<virtio_net_hdr_v1>.stride)
         pktlen += MemoryLayout<virtio_net_hdr_v1>.stride
 #else
         if ipPkt - pkb.raw + pkb.headroom < 4 {
             assert(Logger.lowLevelDebug("no enough room for af header"))
             return false
         } else {
-            raw = Convert.ptr2mutptr(ipPkt.advanced(by: -4))
+            raw = Unsafe.ptr2mutptr(ipPkt.advanced(by: -4))
         }
         pktlen += 4
         raw.pointee = 0

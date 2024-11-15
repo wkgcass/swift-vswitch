@@ -1,8 +1,3 @@
-#if canImport(Darwin)
-import Darwin
-#else
-import Glibc
-#endif
 import VProxyCommonCHelper
 
 public class Logger {
@@ -21,35 +16,34 @@ public class Logger {
         return String(cString: &buf)
     }
 
-    private static func threadIdentifier() -> Int {
-        let curr = pthread_self()
-        return Int(bitPattern: curr)
+    private static func threadIdentifier() -> UInt64 {
+        return OS.gettid()
     }
 
     public static func lowLevelDebug(_ msg: String) -> Bool {
-        print("\(DEBUG)[\(currentTime())][DEBUG] - \(threadIdentifier()) -\(RESET) \(msg)")
+        print("\(DEBUG)[\(currentTime())][DEBUG][\(threadIdentifier())] -\(RESET) \(msg)")
         return true
     }
 
     public static func error(_ logType: LogType, _ msg: String) {
-        print("\(ERROR)[\(currentTime())][ERROR][\(logType)] -\(RESET) \(msg)")
+        print("\(ERROR)[\(currentTime())][ERROR][\(logType)][\(threadIdentifier())] -\(RESET) \(msg)")
     }
 
     public static func error(_ logType: LogType, _ msg: String, _ t: Error) {
-        print("\(ERROR)[\(currentTime())][ERROR][\(logType)] -\(RESET) \(msg)")
+        print("\(ERROR)[\(currentTime())][ERROR][\(logType)][\(threadIdentifier())] -\(RESET) \(msg)")
         print(t)
     }
 
     public static func warn(_ logType: LogType, _ msg: String) {
-        print("\(WARN)[\(currentTime())][WARN][\(logType)] -\(RESET) \(msg)")
+        print("\(WARN)[\(currentTime())][WARN][\(logType)][\(threadIdentifier())] -\(RESET) \(msg)")
     }
 
     public static func info(_ logType: LogType, _ msg: String) {
-        print("\(INFO)[\(currentTime())][INFO][\(logType)] -\(RESET) \(msg)")
+        print("\(INFO)[\(currentTime())][INFO][\(logType)][\(threadIdentifier())] -\(RESET) \(msg)")
     }
 
     public static func trace(_ logType: LogType, _ msg: String) {
-        print("\(TRACE)[\(currentTime())][TRACE][\(logType)] -\(RESET) \(msg)")
+        print("\(TRACE)[\(currentTime())][TRACE][\(logType)][\(threadIdentifier())] -\(RESET) \(msg)")
     }
 
     public static func alert(_ msg: String) {

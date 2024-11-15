@@ -60,8 +60,6 @@ public protocol Thread: AnyObject {
     func getLoop() -> SelectorEventLoop?
     var memPool: FixedSizeFixedCountSingleThreadMemPool { get }
 
-    func releaseWhenThreadFinishes(_ obj: AnyObject) -> UnsafeMutableRawPointer
-
     func handle() -> ThreadHandle
 }
 

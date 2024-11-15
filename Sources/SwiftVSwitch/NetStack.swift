@@ -100,7 +100,7 @@ public class NetStack {
             let src = v4ips.first!
             let buf = RawBufRef()
             let raw = buf.raw().advanced(by: VSwitchReservedHeadroom)
-            let p: UnsafeMutablePointer<swvs_compose_eth_arp> = Convert.ptr2mutUnsafe(raw)
+            let p: UnsafeMutablePointer<swvs_compose_eth_arp> = Unsafe.ptr2mutUnsafe(raw)
             iface.mac.copyInto(&p.pointee.ethhdr.src)
             MacAddress.BROADCAST.copyInto(&p.pointee.ethhdr.dst)
             p.pointee.ethhdr.be_type = BE_ETHER_TYPE_ARP
@@ -128,12 +128,12 @@ public class NetStack {
             let src = v6ips.first!
             let buf = RawBufRef()
             let raw = buf.raw().advanced(by: VSwitchReservedHeadroom)
-            let p: UnsafeMutablePointer<swvs_compose_eth_ip6_icmp6_ns_slla> = Convert.ptr2mutUnsafe(raw)
+            let p: UnsafeMutablePointer<swvs_compose_eth_ip6_icmp6_ns_slla> = Unsafe.ptr2mutUnsafe(raw)
             iface.mac.copyInto(&p.pointee.ethhdr.src)
             MacAddress.BROADCAST.copyInto(&p.pointee.ethhdr.dst)
             p.pointee.ethhdr.be_type = BE_ETHER_TYPE_IPv6
             p.pointee.v6.vtc_flow.0 = 6 << 4
-            p.pointee.v6.be_payload_len = Convert.reverseByteOrder(
+            p.pointee.v6.be_payload_len = Utils.byteOrderConvert(
                 UInt16(MemoryLayout<swvs_compose_eth_ip6_icmp6_ns_slla>.stride -
                     MemoryLayout<swvs_ethhdr>.stride -
                     MemoryLayout<swvs_ipv6hdr>.stride))

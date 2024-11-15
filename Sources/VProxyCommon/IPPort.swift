@@ -50,7 +50,7 @@ public extension IPPort {
         } else {
             ret.sin6_family = sa_family_t(AF_INET)
         }
-        let port = Convert.reverseByteOrder(port)
+        let port = Utils.byteOrderConvert(port)
         ret.sin6_port = port
         ip.copyInto(&ret.sin6_addr)
         if ip is IPv6 {
@@ -89,13 +89,13 @@ public struct IPv4Port: IPPort {
         var xaddr = addr
         var bytes: [UInt8] = Arrays.newArray(capacity: 4, uninitialized: true)
         memcpy(&bytes, &xaddr.sin_addr.s_addr, 4)
-        self.init(IPv4(raw: bytes), Convert.reverseByteOrder(xaddr.sin_port))
+        self.init(IPv4(raw: bytes), Utils.byteOrderConvert(xaddr.sin_port))
     }
 
     public func toSockAddr() -> sockaddr_in {
         var ret = sockaddr_in()
         ret.sin_family = sa_family_t(AF_INET)
-        let port = Convert.reverseByteOrder(port)
+        let port = Utils.byteOrderConvert(port)
         ret.sin_port = port
         ip_.copyInto(&ret.sin_addr)
         return ret
@@ -115,13 +115,13 @@ public struct IPv6Port: IPPort {
         var xaddr = addr
         var bytes: [UInt8] = Arrays.newArray(capacity: 16, uninitialized: true)
         memcpy(&bytes, &xaddr.sin6_addr, 16)
-        self.init(IPv6(raw: bytes), Convert.reverseByteOrder(xaddr.sin6_port))
+        self.init(IPv6(raw: bytes), Utils.byteOrderConvert(xaddr.sin6_port))
     }
 
     public func toSockAddr() -> sockaddr_in6 {
         var ret = sockaddr_in6()
         ret.sin6_family = sa_family_t(AF_INET6)
-        let port = Convert.reverseByteOrder(port)
+        let port = Utils.byteOrderConvert(port)
         ret.sin6_port = port
         ip_.copyInto(&ret.sin6_addr)
         return ret

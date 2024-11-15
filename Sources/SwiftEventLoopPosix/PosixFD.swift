@@ -32,7 +32,7 @@ public class PosixFDs: FDs, FDsWithOpts, FDsWithCoreAffinity {
         guard let raw else {
             return nil
         }
-        let v = Unmanaged<PThread>.fromOpaque(raw).takeUnretainedValue()
+        let v: PThread = Unsafe.convertFromNativeKeepRef(raw)
         return v
     }
 
@@ -250,7 +250,7 @@ public class InetPosixFD: PosixFD, InetFD {
 
     public func bind(_ ipport: any IPPort) throws(IOException) {
         var (n, addr) = ipport.toGeneralSockAddr()
-        let err = globalBind(fd, Convert.ptr2ptrUnsafe(&addr), n)
+        let err = globalBind(fd, Unsafe.ptr2ptrUnsafe(&addr), n)
         if err != 0 {
             throw IOException("failed to bind \(ipport)")
         }
@@ -261,7 +261,7 @@ public class InetPosixFD: PosixFD, InetFD {
     public func connect(_ ipport: any IPPort) throws(IOException) {
         var (n, addr) = ipport.toGeneralSockAddr()
         var errno: Int32 = 0
-        let err = connectWithErrno(fd, Convert.ptr2ptrUnsafe(&addr), n, &errno)
+        let err = connectWithErrno(fd, Unsafe.ptr2ptrUnsafe(&addr), n, &errno)
         if err != 0 {
             if errno == EWOULDBLOCK || errno == EINPROGRESS {
                 return
@@ -282,13 +282,13 @@ public class InetPosixFD: PosixFD, InetFD {
         if af == AF_INET {
             var addr = sockaddr_in()
             var len = UInt32(MemoryLayout<sockaddr_in>.stride)
-            getpeername(fd, Convert.mut2mutUnsafe(&addr), &len)
-            res = IPv4Port(IPv4(raw: &addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
+            getpeername(fd, Unsafe.mut2mutUnsafe(&addr), &len)
+            res = IPv4Port(IPv4(raw: &addr.sin_addr), Utils.byteOrderConvert(addr.sin_port))
         } else {
             var addr = sockaddr_in6()
             var len = UInt32(MemoryLayout<sockaddr_in6>.stride)
-            getpeername(fd, Convert.mut2mutUnsafe(&addr), &len)
-            res = IPv6Port(IPv6(raw: &addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
+            getpeername(fd, Unsafe.mut2mutUnsafe(&addr), &len)
+            res = IPv6Port(IPv6(raw: &addr.sin6_addr), Utils.byteOrderConvert(addr.sin6_port))
         }
         localAddress_ = res
         return res
@@ -303,13 +303,13 @@ public class InetPosixFD: PosixFD, InetFD {
         if af == AF_INET {
             var addr = sockaddr_in()
             var len = UInt32(MemoryLayout<sockaddr_in>.stride)
-            getsockname(fd, Convert.mut2mutUnsafe(&addr), &len)
-            res = IPv4Port(IPv4(raw: &addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
+            getsockname(fd, Unsafe.mut2mutUnsafe(&addr), &len)
+            res = IPv4Port(IPv4(raw: &addr.sin_addr), Utils.byteOrderConvert(addr.sin_port))
         } else {
             var addr = sockaddr_in6()
             var len = UInt32(MemoryLayout<sockaddr_in6>.stride)
-            getsockname(fd, Convert.mut2mutUnsafe(&addr), &len)
-            res = IPv6Port(IPv6(raw: &addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
+            getsockname(fd, Unsafe.mut2mutUnsafe(&addr), &len)
+            res = IPv6Port(IPv6(raw: &addr.sin6_addr), Utils.byteOrderConvert(addr.sin6_port))
         }
         localAddress_ = res
         return res
@@ -350,13 +350,13 @@ public class DatagramPosixFD: InetPosixFD, DatagramFD {
         if af == AF_INET {
             var addr = sockaddr_in()
             var sz = UInt32(MemoryLayout<sockaddr_in6>.stride)
-            n = recvfromWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, 0, Convert.mut2mutUnsafe(&addr), &sz, &errno)
-            res = IPv4Port(IPv4(raw: &addr.sin_addr), Convert.reverseByteOrder(addr.sin_port))
+            n = recvfromWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, 0, Unsafe.mut2mutUnsafe(&addr), &sz, &errno)
+            res = IPv4Port(IPv4(raw: &addr.sin_addr), Utils.byteOrderConvert(addr.sin_port))
         } else {
             var addr = sockaddr_in6()
             var sz = UInt32(MemoryLayout<sockaddr_in6>.stride)
-            n = recvfromWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, 0, Convert.mut2mutUnsafe(&addr), &sz, &errno)
-            res = IPv6Port(IPv6(raw: &addr.sin6_addr), Convert.reverseByteOrder(addr.sin6_port))
+            n = recvfromWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, 0, Unsafe.mut2mutUnsafe(&addr), &sz, &errno)
+            res = IPv6Port(IPv6(raw: &addr.sin6_addr), Utils.byteOrderConvert(addr.sin6_port))
         }
         if n < 0 {
             if errno == EWOULDBLOCK {
@@ -374,7 +374,7 @@ public class DatagramPosixFD: InetPosixFD, DatagramFD {
     public func send(_ buf: [UInt8], off: Int, len: Int, remote: any IPPort) throws(IOException) -> Int {
         var errno: Int32 = 0
         var (addrlen, addr) = remote.toGeneralSockAddr()
-        let n = sendtoWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, 0, Convert.mut2mutUnsafe(&addr), addrlen, &errno)
+        let n = sendtoWithErrno(fd, Arrays.getRaw(from: buf, offset: off), len, 0, Unsafe.mut2mutUnsafe(&addr), addrlen, &errno)
         if n < 0 {
             if errno == EWOULDBLOCK {
                 return 0

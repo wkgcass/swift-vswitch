@@ -25,14 +25,14 @@ public class RouteTable: CustomStringConvertible {
             guard let raw else {
                 return nil
             }
-            return Unmanaged<RouteRule>.fromOpaque(raw).takeUnretainedValue()
+            return Unsafe.convertFromNativeKeepRef(raw)
         } else if let v6 = ip as? IPv6 {
             let ipx = uint128_s(n: v6.toUInt128())
             let raw = poptrie6_lookup_s(&pt, ipx)
             guard let raw else {
                 return nil
             }
-            return Unmanaged<RouteRule>.fromOpaque(raw).takeUnretainedValue()
+            return Unsafe.convertFromNativeKeepRef(raw)
         }
         return nil
     }

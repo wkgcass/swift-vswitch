@@ -103,7 +103,7 @@ public class SelectorEventLoop {
         for index in 0 ..< count {
             let key = selectedEntries[index]
 
-            let registerData = Unmanaged<RegisterData>.fromOpaque(key.attachment!).takeUnretainedValue()
+            let registerData: RegisterData = Unsafe.convertFromNativeKeepRef(key.attachment!)
             let fd = key.fd
             let handler = registerData.handler
 
@@ -393,7 +393,7 @@ public class SelectorEventLoop {
         if initOptions.preferPoll, needWake() {
             runOnLoop {
                 let raw = self.selector.remove(fd)!
-                let att = Unmanaged<RegisterData>.fromOpaque(raw).takeRetainedValue()
+                let att: RegisterData = Unsafe.convertFromNativeDecRef(raw)
                 self.triggerRemovedCallback(fd, att)
             }
             return
@@ -404,7 +404,7 @@ public class SelectorEventLoop {
             wakeup()
         }
 
-        let att = Unmanaged<RegisterData>.fromOpaque(raw).takeRetainedValue()
+        let att: RegisterData = Unsafe.convertFromNativeDecRef(raw)
         triggerRemovedCallback(fd, att)
     }
 
@@ -417,7 +417,7 @@ public class SelectorEventLoop {
         if raw == nil {
             return nil
         }
-        let att = Unmanaged<RegisterData>.fromOpaque(raw!).takeUnretainedValue()
+        let att: RegisterData = Unsafe.convertFromNativeKeepRef(raw!)
         return att.att
     }
 
@@ -453,7 +453,7 @@ public class SelectorEventLoop {
         THE_KEY_SET_BEFORE_SELECTOR_CLOSE = []
 
         for key in keys {
-            let att = Unmanaged<RegisterData>.fromOpaque(key.attachment!).takeRetainedValue()
+            let att: RegisterData = Unsafe.convertFromNativeDecRef(key.attachment!)
             THE_KEY_SET_BEFORE_SELECTOR_CLOSE!.append((key.fd, att))
         }
 

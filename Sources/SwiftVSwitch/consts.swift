@@ -6,20 +6,20 @@ public let ETHER_TYPE_ARP: UInt16 = 0x0806
 public let ETHER_TYPE_IPv4: UInt16 = 0x0800
 public let ETHER_TYPE_IPv6: UInt16 = 0x86dd
 
-public let BE_ETHER_TYPE_8021Q = Convert.reverseByteOrder(ETHER_TYPE_8021Q)
-public let BE_ETHER_TYPE_ARP = Convert.reverseByteOrder(ETHER_TYPE_ARP)
-public let BE_ETHER_TYPE_IPv4 = Convert.reverseByteOrder(ETHER_TYPE_IPv4)
-public let BE_ETHER_TYPE_IPv6 = Convert.reverseByteOrder(ETHER_TYPE_IPv6)
+public let BE_ETHER_TYPE_8021Q = Utils.byteOrderConvert(ETHER_TYPE_8021Q)
+public let BE_ETHER_TYPE_ARP = Utils.byteOrderConvert(ETHER_TYPE_ARP)
+public let BE_ETHER_TYPE_IPv4 = Utils.byteOrderConvert(ETHER_TYPE_IPv4)
+public let BE_ETHER_TYPE_IPv6 = Utils.byteOrderConvert(ETHER_TYPE_IPv6)
 
 public let ARP_PROTOCOL_TYPE_IP: UInt16 = 0x0800
 public let ARP_HARDWARE_TYPE_ETHER: UInt16 = 1
 public let ARP_PROTOCOL_OPCODE_REQ: UInt16 = 1
 public let ARP_PROTOCOL_OPCODE_RESP: UInt16 = 2
 
-public let BE_ARP_PROTOCOL_TYPE_IP = Convert.reverseByteOrder(ARP_PROTOCOL_TYPE_IP)
-public let BE_ARP_HARDWARE_TYPE_ETHER = Convert.reverseByteOrder(ARP_HARDWARE_TYPE_ETHER)
-public let BE_ARP_PROTOCOL_OPCODE_REQ = Convert.reverseByteOrder(ARP_PROTOCOL_OPCODE_REQ)
-public let BE_ARP_PROTOCOL_OPCODE_RESP = Convert.reverseByteOrder(ARP_PROTOCOL_OPCODE_RESP)
+public let BE_ARP_PROTOCOL_TYPE_IP = Utils.byteOrderConvert(ARP_PROTOCOL_TYPE_IP)
+public let BE_ARP_HARDWARE_TYPE_ETHER = Utils.byteOrderConvert(ARP_HARDWARE_TYPE_ETHER)
+public let BE_ARP_PROTOCOL_OPCODE_REQ = Utils.byteOrderConvert(ARP_PROTOCOL_OPCODE_REQ)
+public let BE_ARP_PROTOCOL_OPCODE_RESP = Utils.byteOrderConvert(ARP_PROTOCOL_OPCODE_RESP)
 
 public let IP_PROTOCOL_ICMP: UInt8 = 1
 public let IP_PROTOCOL_ICMPv6: UInt8 = 58

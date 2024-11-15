@@ -18,7 +18,7 @@ public class TapTunFD: PosixFD {
             throw IOException("failed to create tap device")
         }
         tap.dev_name.15 = 0
-        let p: UnsafePointer<CChar> = Convert.ptr2ptrUnsafe(&tap)
+        let p: UnsafePointer<CChar> = Unsafe.ptr2ptrUnsafe(&tap)
         return TapTunFD(fd: tap.fd, dev: String(cString: p))
     }
 
@@ -29,7 +29,7 @@ public class TapTunFD: PosixFD {
             throw IOException("failed to create tun device")
         }
         tun.dev_name.15 = 0
-        let p: UnsafePointer<CChar> = Convert.ptr2ptrUnsafe(&tun)
+        let p: UnsafePointer<CChar> = Unsafe.ptr2ptrUnsafe(&tun)
         return TapTunFD(fd: tun.fd, dev: String(cString: p))
     }
 
@@ -85,7 +85,7 @@ public class TapIface: Iface, Hashable {
             let n: Int
             do {
                 n = try fd.read(
-                    Convert.ptr2mutptr(buf.raw())
+                    Unsafe.ptr2mutptr(buf.raw())
                         .advanced(by: VSwitchReservedHeadroom - MemoryLayout<virtio_net_hdr_v1>.stride),
                     len: VSwitchDefaultPacketBufferSize - (VSwitchReservedHeadroom - MemoryLayout<virtio_net_hdr_v1>.stride)
                 )
@@ -112,15 +112,15 @@ public class TapIface: Iface, Hashable {
             return false
         }
         let hdr: UnsafeMutablePointer<virtio_net_hdr_v1> =
-            Convert.ptr2mutUnsafe(pkb.raw.advanced(by: -MemoryLayout<virtio_net_hdr_v1>.stride))
+            Unsafe.ptr2mutUnsafe(pkb.raw.advanced(by: -MemoryLayout<virtio_net_hdr_v1>.stride))
         memset(hdr, 0, MemoryLayout<virtio_net_hdr_v1>.stride)
 
         var out = vproxy_csum_out()
-        let err = vproxy_pkt_ether_csum_ex(Convert.ptr2mutUnsafe(pkb.raw), Int32(pkb.pktlen), VPROXY_CSUM_IP | VPROXY_CSUM_UP_PSEUDO, &out)
+        let err = vproxy_pkt_ether_csum_ex(Unsafe.ptr2mutUnsafe(pkb.raw), Int32(pkb.pktlen), VPROXY_CSUM_IP | VPROXY_CSUM_UP_PSEUDO, &out)
         if err == 0 {
             hdr.pointee.flags = UInt8(VIRTIO_NET_HDR_F_NEEDS_CSUM)
             hdr.pointee.hdr_len = UInt16(pkb.pktlen - pkb.lengthFromAppToEnd)
-            hdr.pointee.csum_start = UInt16(Convert.ptr2ptrUnsafe(out.up_pos) - pkb.raw)
+            hdr.pointee.csum_start = UInt16(Unsafe.ptr2ptrUnsafe(out.up_pos) - pkb.raw)
             hdr.pointee.csum_offset = UInt16(out.up_csum_pos - out.up_pos)
         }
         let writeLen = pkb.pktlen + MemoryLayout<virtio_net_hdr_v1>.stride

@@ -9,7 +9,7 @@ public class ConcurrentQueue<E: AnyObject> {
     }
 
     public func push(_ e: E) {
-        let ptr = Unmanaged<E>.passRetained(e).toOpaque()
+        let ptr = Unsafe.convertToNativeAddRef(e)
         if !mpscq_enqueue(&queue, ptr) {
             Logger.warn(.ALERT, "failed to enqueue to ConcurrentQueue")
             Unmanaged<E>.fromOpaque(ptr).release()
@@ -21,7 +21,7 @@ public class ConcurrentQueue<E: AnyObject> {
         guard let ptr else {
             return nil
         }
-        let e = Unmanaged<E>.fromOpaque(ptr).takeRetainedValue()
+        let e: E = Unsafe.convertFromNativeDecRef(ptr)
         return e
     }
 

@@ -64,7 +64,7 @@ public class SimpleHostMimicIface: VirtualIface {
             }
             assert(Logger.lowLevelDebug("begin to handle the arp req ..."))
 
-            let arp: UnsafeMutablePointer<swvs_arp> = Convert.ptr2mutUnsafe(arpRaw)
+            let arp: UnsafeMutablePointer<swvs_arp> = Unsafe.ptr2mutUnsafe(arpRaw)
 
             ifMac.copyInto(&ether.pointee.src)
             pkb.srcmac!.copyInto(&ether.pointee.dst)
@@ -91,7 +91,7 @@ public class SimpleHostMimicIface: VirtualIface {
                 assert(Logger.lowLevelDebug("not valid icmp"))
                 return false
             }
-            let icmp: UnsafePointer<swvs_icmp_hdr> = Convert.ptr2ptrUnsafe(upper)
+            let icmp: UnsafePointer<swvs_icmp_hdr> = Unsafe.ptr2ptrUnsafe(upper)
             if icmp.pointee.type != ICMP_PROTOCOL_TYPE_ECHO_REQ {
                 assert(Logger.lowLevelDebug("not icmp req (ping)"))
                 return false
@@ -102,11 +102,11 @@ public class SimpleHostMimicIface: VirtualIface {
             }
             assert(Logger.lowLevelDebug("begin to handle the icmp ping ..."))
 
-            let ip: UnsafeMutablePointer<swvs_ipv4hdr> = Convert.ptr2mutUnsafe(ipraw)
+            let ip: UnsafeMutablePointer<swvs_ipv4hdr> = Unsafe.ptr2mutUnsafe(ipraw)
             pkb.ipSrc!.copyInto(&ip.pointee.dst)
             pkb.ipDst!.copyInto(&ip.pointee.src)
 
-            let ping: UnsafeMutablePointer<swvs_compose_icmp_echoreq> = Convert.ptr2mutUnsafe(upper)
+            let ping: UnsafeMutablePointer<swvs_compose_icmp_echoreq> = Unsafe.ptr2mutUnsafe(upper)
             ping.pointee.icmp.type = ICMP_PROTOCOL_TYPE_ECHO_RESP
 
             pkb.srcmac!.copyInto(&ether.pointee.dst)
@@ -128,7 +128,7 @@ public class SimpleHostMimicIface: VirtualIface {
                 assert(Logger.lowLevelDebug("not valid icmpv6"))
                 return false
             }
-            let icmp: UnsafeMutablePointer<swvs_icmp_hdr> = Convert.ptr2mutUnsafe(upper)
+            let icmp: UnsafeMutablePointer<swvs_icmp_hdr> = Unsafe.ptr2mutUnsafe(upper)
 
             if icmp.pointee.type == ICMPv6_PROTOCOL_TYPE_Neighbor_Solicitation {
                 assert(Logger.lowLevelDebug("input is neighbor solicitation?"))
@@ -161,7 +161,7 @@ public class SimpleHostMimicIface: VirtualIface {
                             assert(Logger.lowLevelDebug("invalid icmpv6 opt length"))
                             break
                         }
-                        opt = pkb.getAs(Convert.advance(mut: opt2, inc: inc))
+                        opt = pkb.getAs(Unsafe.advance(mut: opt2, inc: inc))
                         continue
                     }
                     if opt2.pointee.len != 1 {
@@ -190,11 +190,11 @@ public class SimpleHostMimicIface: VirtualIface {
                 ifMac.copyInto(&ether.pointee.src)
                 pkb.srcmac!.copyInto(&ether.pointee.dst)
 
-                let ip: UnsafeMutablePointer<swvs_ipv6hdr> = Convert.ptr2mutUnsafe(ipraw)
+                let ip: UnsafeMutablePointer<swvs_ipv6hdr> = Unsafe.ptr2mutUnsafe(ipraw)
                 pkb.ipSrc!.copyInto(&ip.pointee.dst)
                 target.copyInto(&ip.pointee.src)
 
-                let icmpRes: UnsafeMutablePointer<swvs_compose_icmpv6_na_tlla> = Convert.ptr2mutUnsafe(icmp)
+                let icmpRes: UnsafeMutablePointer<swvs_compose_icmpv6_na_tlla> = Unsafe.ptr2mutUnsafe(icmp)
                 icmpRes.pointee.icmp.type = ICMPv6_PROTOCOL_TYPE_Neighbor_Advertisement
                 icmpRes.pointee.icmp.code = 0
                 icmpRes.pointee.opt.type = ICMPv6_OPTION_TYPE_Target_Link_Layer_Address
@@ -209,8 +209,8 @@ public class SimpleHostMimicIface: VirtualIface {
                 } else {
                     assert(Logger.lowLevelDebug("need to shrink packet total length: \(lenDelta)"))
                 }
-                ip.pointee.be_payload_len = Convert.reverseByteOrder(Convert.reverseByteOrder(
-                    ip.pointee.be_payload_len - UInt16(lenDelta)))
+                ip.pointee.be_payload_len = Utils.byteOrderConvert(Utils.byteOrderConvert(
+                    ip.pointee.be_payload_len) - UInt16(lenDelta))
             } else if icmp.pointee.type == ICMPv6_PROTOCOL_TYPE_ECHO_REQ {
                 assert(Logger.lowLevelDebug("input is icmpv6 ping-req?"))
 
@@ -223,7 +223,7 @@ public class SimpleHostMimicIface: VirtualIface {
 
                 icmp.pointee.type = ICMPv6_PROTOCOL_TYPE_ECHO_RESP
 
-                let ip: UnsafeMutablePointer<swvs_ipv6hdr> = Convert.ptr2mutUnsafe(ipraw)
+                let ip: UnsafeMutablePointer<swvs_ipv6hdr> = Unsafe.ptr2mutUnsafe(ipraw)
                 pkb.ipSrc!.copyInto(&ip.pointee.dst)
                 pkb.ipDst!.copyInto(&ip.pointee.src)
 

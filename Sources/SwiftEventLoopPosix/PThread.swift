@@ -3,14 +3,11 @@ import SwiftEventLoopPosixCHelper
 import VProxyCommon
 
 let thread_entry_func: @convention(c) (_ p: UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer? = { p in
-    let ctx = Unmanaged<ThreadStartContext>.fromOpaque(p!).takeRetainedValue()
+    let ctx: ThreadStartContext = Unsafe.convertFromNativeDecRef(p!)
     let retained = Unmanaged.passRetained(ctx.thread)
     ctx.fds.setThreadLocal(retained.toOpaque())
     ctx.runnable()
     retained.release()
-    for um in ctx.thread.recorded {
-        um.release()
-    }
     return nil
 }
 
@@ -30,7 +27,6 @@ class PThread: Thread {
     private let fds: PosixFDs
     private let runnable: () -> Void
     private var thread = swvs_thread_t()
-    var recorded = [Unmanaged<AnyObject>]()
 
     private var loop_: SelectorEventLoop? = nil
 
@@ -58,13 +54,6 @@ class PThread: Thread {
     }
 
     public let memPool = FixedSizeFixedCountSingleThreadMemPool(size: ThreadMemPoolArraySize, count: ThreadMemPoolCount)!
-
-    public func releaseWhenThreadFinishes(_ obj: AnyObject) -> UnsafeMutableRawPointer {
-        let unmanaged = Unmanaged.passRetained(obj)
-        let ret = unmanaged.toOpaque()
-        recorded.append(unmanaged)
-        return ret
-    }
 
     public func handle() -> ThreadHandle {
         return handle_

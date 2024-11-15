@@ -329,7 +329,7 @@ public class PacketBuffer: CustomStringConvertible {
                                               uninitialized: true))
         }
         raw = buf.raw().advanced(by: other.headroom)
-        memcpy(Convert.ptr2mutptr(buf.raw()),
+        memcpy(Unsafe.ptr2mutptr(buf.raw()),
                other.raw.advanced(by: -other.headroom),
                other.headroom + other.pktlen + other.tailroom)
 
@@ -380,7 +380,7 @@ public class PacketBuffer: CustomStringConvertible {
             if flags & PKB_FLAG_ETHER_DONE == 0 {
                 ensurePktInfo(level: .ETHER)
             }
-            return ether_ == nil ? nil : Convert.ptr2mutUnsafe(ether_!)
+            return ether_ == nil ? nil : Unsafe.ptr2mutUnsafe(ether_!)
         }
         if !occpuyHeadroom(MemoryLayout<swvs_ethhdr>.stride) {
             return nil
@@ -388,7 +388,7 @@ public class PacketBuffer: CustomStringConvertible {
         ether_ = raw
         flags &= ~PKB_FLAG_ETHER_DONE
         flags &= ~PKB_FLAG_NO_ETHER
-        return Convert.ptr2mutUnsafe(raw)
+        return Unsafe.ptr2mutUnsafe(raw)
     }
 
     public func ensureVlan(_ vlan: UInt16) -> UnsafeMutablePointer<swvs_compose_eth_vlan>? {
@@ -399,26 +399,26 @@ public class PacketBuffer: CustomStringConvertible {
             if !occpuyHeadroom(MemoryLayout<swvs_vlantag>.stride) {
                 return nil
             }
-            let mut = Convert.ptr2mutptr(ether_!)
+            let mut = Unsafe.ptr2mutptr(ether_!)
             memmove(mut.advanced(by: -4), mut, 12)
             vlanState_ = .REMOVED
-            let ethvlan: UnsafeMutablePointer<swvs_compose_eth_vlan> = Convert.ptr2mutUnsafe(raw)
+            let ethvlan: UnsafeMutablePointer<swvs_compose_eth_vlan> = Unsafe.ptr2mutUnsafe(raw)
             ethvlan.pointee.ethhdr.be_type = BE_ETHER_TYPE_8021Q
-            ethvlan.pointee.vlan.be_vid = Convert.reverseByteOrder(vlan)
-            return Convert.ptr2mutUnsafe(raw)
+            ethvlan.pointee.vlan.be_vid = Utils.byteOrderConvert(vlan)
+            return Unsafe.ptr2mutUnsafe(raw)
         }
         if !occpuyHeadroom(MemoryLayout<swvs_compose_eth_vlan>.stride) {
             return nil
         }
         ether_ = raw
-        let ethvlan: UnsafeMutablePointer<swvs_compose_eth_vlan> = Convert.ptr2mutUnsafe(raw)
+        let ethvlan: UnsafeMutablePointer<swvs_compose_eth_vlan> = Unsafe.ptr2mutUnsafe(raw)
         ethvlan.pointee.ethhdr.be_type = BE_ETHER_TYPE_8021Q
-        ethvlan.pointee.vlan.be_vid = Convert.reverseByteOrder(vlan)
-        ethvlan.pointee.vlan.be_type = Convert.reverseByteOrder(ethertype_)
+        ethvlan.pointee.vlan.be_vid = Utils.byteOrderConvert(vlan)
+        ethvlan.pointee.vlan.be_type = Utils.byteOrderConvert(ethertype_)
         vlanState_ = .REMOVED
         flags &= ~PKB_FLAG_NO_ETHER
         flags &= ~PKB_FLAG_ETHER_DONE
-        return Convert.ptr2mutUnsafe(raw)
+        return Unsafe.ptr2mutUnsafe(raw)
     }
 
     public func removeVlan() {
@@ -428,7 +428,7 @@ public class PacketBuffer: CustomStringConvertible {
         if vlanState_ == .INVALID || vlanState_ == .NO_VLAN {
             return
         }
-        let mut = Convert.ptr2mutptr(ether_!)
+        let mut = Unsafe.ptr2mutptr(ether_!)
         memmove(mut.advanced(by: 4), mut, 14)
         _ = releaseHeadroom(MemoryLayout<swvs_vlantag>.stride)
         vlanState_ = .NO_VLAN
@@ -443,12 +443,12 @@ public class PacketBuffer: CustomStringConvertible {
             return nil
         }
         if ethertype == ETHER_TYPE_IPv4 {
-            return Convert.ptr2mutUnsafe(ip_!)
+            return Unsafe.ptr2mutUnsafe(ip_!)
         }
         if ethertype != ETHER_TYPE_IPv6 {
             return nil
         }
-        let v6: UnsafePointer<swvs_ipv6hdr> = Convert.ptr2ptrUnsafe(ip_!)
+        let v6: UnsafePointer<swvs_ipv6hdr> = Unsafe.ptr2ptrUnsafe(ip_!)
         let hopLimits = v6.pointee.hop_limits
 
         let oldIp = ip_!
@@ -467,23 +467,23 @@ public class PacketBuffer: CustomStringConvertible {
         // +-----|--------+-----+-----+
         // |     |        |     |     |
         // raw newraw   oldIp   ip  upper
-        let newRaw = Convert.ptr2mutptr(raw)
+        let newRaw = Unsafe.ptr2mutptr(raw)
         memmove(newRaw, oldRaw, count)
 
-        let v4: UnsafeMutablePointer<swvs_ipv4hdr> = Convert.ptr2mutUnsafe(ip_!)
+        let v4: UnsafeMutablePointer<swvs_ipv4hdr> = Unsafe.ptr2mutUnsafe(ip_!)
         memset(v4, 0, 20)
         v4.pointee.version_ihl = 0x45
-        v4.pointee.be_total_length = Convert.reverseByteOrder(UInt16(lengthFromIpToEnd))
+        v4.pointee.be_total_length = Utils.byteOrderConvert(UInt16(lengthFromIpToEnd))
         v4.pointee.time_to_live = hopLimits
         v4.pointee.proto = proto_
         ethertype_ = ETHER_TYPE_IPv4
         if ether_ != nil {
             ether_ = raw
             if vlanState_ != .NO_VLAN {
-                let ethervlan: UnsafeMutablePointer<swvs_compose_eth_vlan> = Convert.ptr2mutUnsafe(ether_!)
+                let ethervlan: UnsafeMutablePointer<swvs_compose_eth_vlan> = Unsafe.ptr2mutUnsafe(ether_!)
                 ethervlan.pointee.vlan.be_type = BE_ETHER_TYPE_IPv4
             } else {
-                let ether: UnsafeMutablePointer<swvs_ethhdr> = Convert.ptr2mutUnsafe(ether_!)
+                let ether: UnsafeMutablePointer<swvs_ethhdr> = Unsafe.ptr2mutUnsafe(ether_!)
                 ether.pointee.be_type = BE_ETHER_TYPE_IPv4
             }
         }
@@ -499,12 +499,12 @@ public class PacketBuffer: CustomStringConvertible {
             return nil
         }
         if ethertype == ETHER_TYPE_IPv6 {
-            return Convert.ptr2mutUnsafe(ip_!)
+            return Unsafe.ptr2mutUnsafe(ip_!)
         }
         if ethertype != ETHER_TYPE_IPv4 {
             return nil
         }
-        let v4: UnsafePointer<swvs_ipv4hdr> = Convert.ptr2ptrUnsafe(ip_!)
+        let v4: UnsafePointer<swvs_ipv4hdr> = Unsafe.ptr2ptrUnsafe(ip_!)
         let ttl = v4.pointee.time_to_live
 
         let oldIp = ip_!
@@ -523,23 +523,23 @@ public class PacketBuffer: CustomStringConvertible {
         //   |-------+-----+---------+----------+
         //   |       |     |         |          |
         // newraw    ip   raw      oldIp      upper
-        let newRaw = Convert.ptr2mutptr(raw)
+        let newRaw = Unsafe.ptr2mutptr(raw)
         memmove(newRaw, oldRaw, count)
 
-        let v6: UnsafeMutablePointer<swvs_ipv6hdr> = Convert.ptr2mutUnsafe(ip_!)
+        let v6: UnsafeMutablePointer<swvs_ipv6hdr> = Unsafe.ptr2mutUnsafe(ip_!)
         memset(v6, 0, 40)
         v6.pointee.vtc_flow.0 = (6 << 4)
-        v6.pointee.be_payload_len = Convert.reverseByteOrder(UInt16(lengthFromUpperToEnd))
+        v6.pointee.be_payload_len = Utils.byteOrderConvert(UInt16(lengthFromUpperToEnd))
         v6.pointee.next_hdr = proto_
         v6.pointee.hop_limits = ttl
         ethertype_ = ETHER_TYPE_IPv6
         if ether_ != nil {
             ether_ = raw
             if vlanState_ != .NO_VLAN {
-                let ethervlan: UnsafeMutablePointer<swvs_compose_eth_vlan> = Convert.ptr2mutUnsafe(ether_!)
+                let ethervlan: UnsafeMutablePointer<swvs_compose_eth_vlan> = Unsafe.ptr2mutUnsafe(ether_!)
                 ethervlan.pointee.vlan.be_type = BE_ETHER_TYPE_IPv6
             } else {
-                let ether: UnsafeMutablePointer<swvs_ethhdr> = Convert.ptr2mutUnsafe(ether_!)
+                let ether: UnsafeMutablePointer<swvs_ethhdr> = Unsafe.ptr2mutUnsafe(ether_!)
                 ether.pointee.be_type = BE_ETHER_TYPE_IPv6
             }
         }
@@ -639,11 +639,11 @@ public class PacketBuffer: CustomStringConvertible {
 
     public func getAs<T>(_ p: UnsafeRawPointer, _ logHint: String = "<?>") -> UnsafeMutablePointer<T>? {
         let len = MemoryLayout<T>.stride
-        if Convert.raw2ptr(p) + len - raw > pktlen {
+        if Unsafe.raw2ptr(p) + len - raw > pktlen {
             assert(Logger.lowLevelDebug("pktlen=\(pktlen) not enough for \(logHint)"))
             return nil
         }
-        return Convert.raw2mutptr(p)
+        return Unsafe.raw2mutptr(p)
     }
 
     private func calcEtherInfo() {
@@ -681,11 +681,11 @@ public class PacketBuffer: CustomStringConvertible {
             return
         }
 
-        ethertype_ = Convert.reverseByteOrder(etherPtr.pointee.be_type)
-        dstmac_ = MacAddress(raw: Convert.ptr2ptrUnsafe(etherPtr))
-        srcmac_ = MacAddress(raw: Convert.ptr2ptrUnsafe(etherPtr).advanced(by: 6))
+        ethertype_ = Utils.byteOrderConvert(etherPtr.pointee.be_type)
+        dstmac_ = MacAddress(raw: Unsafe.ptr2ptrUnsafe(etherPtr))
+        srcmac_ = MacAddress(raw: Unsafe.ptr2ptrUnsafe(etherPtr).advanced(by: 6))
         ether_ = raw
-        ip_ = Convert.mut2ptrUnsafe(etherPtr.advanced(by: 1))
+        ip_ = Unsafe.mut2ptrUnsafe(etherPtr.advanced(by: 1))
         flags &= ~PKB_FLAG_ETHER_FAIL
         flags |= PKB_FLAG_ETHER_DONE
     }
@@ -709,10 +709,10 @@ public class PacketBuffer: CustomStringConvertible {
                 return
             }
 
-            vlan_ = Convert.reverseByteOrder(vlanPtr.pointee.be_vid)
-            ethertype_ = Convert.reverseByteOrder(vlanPtr.pointee.be_type)
+            vlan_ = Utils.byteOrderConvert(vlanPtr.pointee.be_vid)
+            ethertype_ = Utils.byteOrderConvert(vlanPtr.pointee.be_type)
 
-            ip_ = Convert.ptr2ptrUnsafe(vlanPtr.advanced(by: 1))
+            ip_ = Unsafe.ptr2ptrUnsafe(vlanPtr.advanced(by: 1))
             vlanState_ = .HAS_VLAN
         } else {
             vlanState_ = .NO_VLAN
@@ -734,7 +734,7 @@ public class PacketBuffer: CustomStringConvertible {
                 return
             }
 
-            let expectedPktlen = Convert.ptr2ptrUnsafe(arpPtr) + MemoryLayout<swvs_arp>.stride - raw
+            let expectedPktlen = Unsafe.ptr2ptrUnsafe(arpPtr) + MemoryLayout<swvs_arp>.stride - raw
             if expectedPktlen < pktlen {
                 assert(Logger.lowLevelDebug("shrinks pktlen from \(pktlen) to \(expectedPktlen)"))
                 tailroom += pktlen - expectedPktlen
@@ -766,7 +766,7 @@ public class PacketBuffer: CustomStringConvertible {
 
             ip4Src_ = IPv4(raw: &arpPtr.pointee.arp_sip)
             ip4Dst_ = IPv4(raw: &arpPtr.pointee.arp_tip)
-            srcPort_ = Convert.reverseByteOrder(arpPtr.pointee.be_arp_opcode)
+            srcPort_ = Utils.byteOrderConvert(arpPtr.pointee.be_arp_opcode)
         } else if ethertype_ == ETHER_TYPE_IPv4 {
             let ipPtr: UnsafeMutablePointer<swvs_ipv4hdr>? = getAs(ip_!, "ipv4")
             guard let ipPtr else {
@@ -780,18 +780,18 @@ public class PacketBuffer: CustomStringConvertible {
                 flags |= PKB_FLAG_IP_FAIL | PKB_FLAG_IP_DONE
                 return
             }
-            if Convert.ptr2ptrUnsafe(ipPtr).advanced(by: len) - raw > pktlen {
+            if Unsafe.ptr2ptrUnsafe(ipPtr).advanced(by: len) - raw > pktlen {
                 assert(Logger.lowLevelDebug("pktlen=\(pktlen) < ipv4 len=\(len)"))
                 flags |= PKB_FLAG_IP_FAIL | PKB_FLAG_IP_DONE
                 return
             }
-            let totalLen = Int(Convert.reverseByteOrder(ipPtr.pointee.be_total_length))
+            let totalLen = Int(Utils.byteOrderConvert(ipPtr.pointee.be_total_length))
             if totalLen < len {
                 assert(Logger.lowLevelDebug("totalLen=\(totalLen) < len=\(len)"))
                 flags |= PKB_FLAG_IP_FAIL | PKB_FLAG_IP_DONE
                 return
             }
-            let expectedPktlen = Convert.ptr2ptrUnsafe(ipPtr).advanced(by: totalLen) - raw
+            let expectedPktlen = Unsafe.ptr2ptrUnsafe(ipPtr).advanced(by: totalLen) - raw
             if expectedPktlen > pktlen {
                 assert(Logger.lowLevelDebug("totalLen=\(totalLen) will exceed pktlen=\(pktlen)"))
                 flags |= PKB_FLAG_IP_FAIL | PKB_FLAG_IP_DONE
@@ -807,7 +807,7 @@ public class PacketBuffer: CustomStringConvertible {
             ip4Src_ = IPv4(raw: &ipPtr.pointee.src)
             ip4Dst_ = IPv4(raw: &ipPtr.pointee.dst)
             proto_ = ipPtr.pointee.proto
-            upper_ = Convert.ptr2ptrUnsafe(ipPtr).advanced(by: len)
+            upper_ = Unsafe.ptr2ptrUnsafe(ipPtr).advanced(by: len)
         } else if ethertype_ == ETHER_TYPE_IPv6 {
             let ipPtr: UnsafeMutablePointer<swvs_ipv6hdr>? = getAs(ip_!, "ipv6")
             guard let ipPtr else {
@@ -815,8 +815,8 @@ public class PacketBuffer: CustomStringConvertible {
                 return
             }
 
-            let payloadLen = Int(Convert.reverseByteOrder(ipPtr.pointee.be_payload_len))
-            let expectedPktlen = Convert.ptr2ptrUnsafe(ipPtr).advanced(by: 40).advanced(by: payloadLen) - raw
+            let payloadLen = Int(Utils.byteOrderConvert(ipPtr.pointee.be_payload_len))
+            let expectedPktlen = Unsafe.ptr2ptrUnsafe(ipPtr).advanced(by: 40).advanced(by: payloadLen) - raw
             if expectedPktlen > pktlen {
                 assert(Logger.lowLevelDebug("payloadLen=\(payloadLen) will exceed pktlen=\(pktlen)"))
                 flags |= PKB_FLAG_IP_FAIL | PKB_FLAG_IP_DONE
@@ -869,14 +869,14 @@ public class PacketBuffer: CustomStringConvertible {
                     flags |= PKB_FLAG_UPPER_FAIL | PKB_FLAG_UPPER_DONE
                     return
                 }
-                if Convert.ptr2ptrUnsafe(tcpPtr) + len - raw > pktlen {
+                if Unsafe.ptr2ptrUnsafe(tcpPtr) + len - raw > pktlen {
                     assert(Logger.lowLevelDebug("pktlen=\(pktlen) not enough for tcp len=\(len)"))
                     flags |= PKB_FLAG_UPPER_FAIL | PKB_FLAG_UPPER_DONE
                     return
                 }
-                srcPort_ = Convert.reverseByteOrder(tcpPtr.pointee.be_src_port)
-                dstPort_ = Convert.reverseByteOrder(tcpPtr.pointee.be_dst_port)
-                app_ = Convert.ptr2ptrUnsafe(tcpPtr).advanced(by: len)
+                srcPort_ = Utils.byteOrderConvert(tcpPtr.pointee.be_src_port)
+                dstPort_ = Utils.byteOrderConvert(tcpPtr.pointee.be_dst_port)
+                app_ = Unsafe.ptr2ptrUnsafe(tcpPtr).advanced(by: len)
                 appLen_ = UInt16(pktlen - (app_! - raw))
             } else if proto_ == IP_PROTOCOL_UDP {
                 let udpPtr: UnsafeMutablePointer<swvs_udphdr>? = getAs(upper_!, "udp")
@@ -885,13 +885,13 @@ public class PacketBuffer: CustomStringConvertible {
                     return
                 }
 
-                let len = Int(Convert.reverseByteOrder(udpPtr.pointee.be_len))
+                let len = Int(Utils.byteOrderConvert(udpPtr.pointee.be_len))
                 if len < 8 {
                     assert(Logger.lowLevelDebug("udp len=\(len) < 8"))
                     flags |= PKB_FLAG_UPPER_FAIL | PKB_FLAG_UPPER_DONE
                     return
                 }
-                let expectedPktlen = Convert.ptr2ptrUnsafe(udpPtr) + len - raw
+                let expectedPktlen = Unsafe.ptr2ptrUnsafe(udpPtr) + len - raw
                 if expectedPktlen > pktlen {
                     assert(Logger.lowLevelDebug("pktlen=\(pktlen) not enough for udp len=\(len)"))
                     flags |= PKB_FLAG_UPPER_FAIL | PKB_FLAG_UPPER_DONE
@@ -903,9 +903,9 @@ public class PacketBuffer: CustomStringConvertible {
                 } else {
                     assert(Logger.lowLevelDebug("udpLen=\(len) exactly matches the pktlen"))
                 }
-                srcPort_ = Convert.reverseByteOrder(udpPtr.pointee.be_src_port)
-                dstPort_ = Convert.reverseByteOrder(udpPtr.pointee.be_dst_port)
-                app_ = Convert.ptr2ptrUnsafe(udpPtr.advanced(by: 1))
+                srcPort_ = Utils.byteOrderConvert(udpPtr.pointee.be_src_port)
+                dstPort_ = Utils.byteOrderConvert(udpPtr.pointee.be_dst_port)
+                app_ = Unsafe.ptr2ptrUnsafe(udpPtr.advanced(by: 1))
                 appLen_ = UInt16(len - 8)
             } else if proto_ == IP_PROTOCOL_ICMP || proto_ == IP_PROTOCOL_ICMPv6 {
                 let icmpPtr: UnsafeMutablePointer<swvs_icmp_hdr>? = getAs(upper_!, "icmp{4|6}")
@@ -916,7 +916,7 @@ public class PacketBuffer: CustomStringConvertible {
 
                 srcPort_ = UInt16(icmpPtr.pointee.type)
                 dstPort_ = UInt16(icmpPtr.pointee.code)
-                app_ = Convert.ptr2ptrUnsafe(icmpPtr.advanced(by: 1))
+                app_ = Unsafe.ptr2ptrUnsafe(icmpPtr.advanced(by: 1))
                 appLen_ = UInt16(pktlen - (app_! - raw))
             } else {
                 assert(Logger.lowLevelDebug("unknown ip proto \(proto_)"))
@@ -949,14 +949,14 @@ public class PacketBuffer: CustomStringConvertible {
     private func skipIPv6Headers(_ v6: UnsafePointer<swvs_ipv6hdr>) -> (UInt8, UnsafePointer<UInt8>)? {
         let hdr = v6.pointee.next_hdr
         if !IPv6_needs_next_header.contains(hdr) {
-            return (hdr, Convert.ptr2ptrUnsafe(v6.advanced(by: 1)))
+            return (hdr, Unsafe.ptr2ptrUnsafe(v6.advanced(by: 1)))
         }
-        let hdrptr: UnsafePointer<swvs_ipv6nxthdr> = Convert.ptr2ptrUnsafe(v6.advanced(by: 1))
-        if Convert.ptr2ptrUnsafe(hdrptr) + 8 - raw > pktlen {
+        let hdrptr: UnsafePointer<swvs_ipv6nxthdr> = Unsafe.ptr2ptrUnsafe(v6.advanced(by: 1))
+        if Unsafe.ptr2ptrUnsafe(hdrptr) + 8 - raw > pktlen {
             assert(Logger.lowLevelDebug("pktlen=\(pktlen) not enough for nexthdr \(hdrptr)"))
             return nil
         }
-        if Convert.ptr2ptrUnsafe(hdrptr) + 8 + Int(hdrptr.pointee.len) - raw > pktlen {
+        if Unsafe.ptr2ptrUnsafe(hdrptr) + 8 + Int(hdrptr.pointee.len) - raw > pktlen {
             assert(Logger.lowLevelDebug("pktlen=\(pktlen) not enough for nexthdr \(hdrptr) len=\(hdrptr.pointee.len)"))
             return nil
         }
@@ -964,17 +964,17 @@ public class PacketBuffer: CustomStringConvertible {
     }
 
     private func skipIPv6NextHeaders(_ hdrptr: UnsafePointer<swvs_ipv6nxthdr>) -> (UInt8, UnsafePointer<UInt8>)? {
-        let p: UnsafePointer<UInt8> = Convert.ptr2ptrUnsafe(hdrptr)
+        let p: UnsafePointer<UInt8> = Unsafe.ptr2ptrUnsafe(hdrptr)
         let nxt = p.advanced(by: Int(8 + hdrptr.pointee.len))
         if !IPv6_needs_next_header.contains(hdrptr.pointee.next_hdr) {
             return (hdrptr.pointee.next_hdr, nxt)
         }
-        if Convert.ptr2ptrUnsafe(nxt) + 8 - raw > pktlen {
+        if Unsafe.ptr2ptrUnsafe(nxt) + 8 - raw > pktlen {
             assert(Logger.lowLevelDebug("pktlen=\(pktlen) not enough for nexthdr \(nxt)"))
             return nil
         }
-        let nxtPtr: UnsafePointer<swvs_ipv6nxthdr> = Convert.ptr2ptrUnsafe(nxt)
-        if Convert.raw2ptr(nxt) + 8 + Int(nxtPtr.pointee.len) - raw > pktlen {
+        let nxtPtr: UnsafePointer<swvs_ipv6nxthdr> = Unsafe.ptr2ptrUnsafe(nxt)
+        if Unsafe.raw2ptr(nxt) + 8 + Int(nxtPtr.pointee.len) - raw > pktlen {
             assert(Logger.lowLevelDebug("pktlen=\(pktlen) not enough for nexthdr \(nxt) len=\(hdrptr.pointee.len)"))
             return nil
         }
@@ -1119,7 +1119,7 @@ public class ArrayBufRef: BufRef {
     }
 
     override public func raw() -> UnsafePointer<UInt8> {
-        return Convert.mut2ptr(Arrays.getRaw(from: array))
+        return Unsafe.mut2ptr(Arrays.getRaw(from: array))
     }
 
     override public func shareable() -> Bool {
@@ -1135,11 +1135,11 @@ public class RawBufRef: BufRef {
         let thread = FDProvider.get().currentThread()
         if let thread, let res = thread.memPool.get() {
             index = res.0
-            raw_ = Convert.mut2ptr(res.1)
+            raw_ = Unsafe.mut2ptr(res.1)
         } else {
             index = -1
             let m = malloc(VSwitchDefaultPacketBufferSize)!
-            raw_ = Convert.mutraw2ptr(m)
+            raw_ = Unsafe.mutraw2ptr(m)
         }
     }
 
@@ -1153,7 +1153,7 @@ public class RawBufRef: BufRef {
 
     override public func doDeinit() {
         if index == -1 {
-            free(Convert.ptr2mutraw(raw_))
+            free(Unsafe.ptr2mutraw(raw_))
         } else {
             let thread = FDProvider.get().currentThread()!
             thread.memPool.store(index)

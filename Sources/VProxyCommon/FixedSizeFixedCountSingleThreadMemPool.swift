@@ -18,7 +18,7 @@ public class FixedSizeFixedCountSingleThreadMemPool {
         guard let ptr else {
             return nil
         }
-        buf = Convert.mutraw2mutptr(ptr)
+        buf = Unsafe.mutraw2mutptr(ptr)
         chunks = Arrays.newArray(capacity: count)
         for i in 0 ..< count {
             chunks[i].index = i

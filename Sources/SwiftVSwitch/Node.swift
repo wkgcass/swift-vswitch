@@ -254,24 +254,24 @@ open class DevInput: Node {
         // get
         var ipCsum: (UInt8, UInt8) = (0, 0)
         if pkb.ethertype == ETHER_TYPE_IPv4 {
-            let ip: UnsafePointer<swvs_ipv4hdr> = Convert.ptr2ptrUnsafe(ip)
+            let ip: UnsafePointer<swvs_ipv4hdr> = Unsafe.ptr2ptrUnsafe(ip)
             ipCsum = ip.pointee.csum
         }
         var checkUpper = false
         var upperCsum: (UInt8, UInt8) = (0, 0)
         if let upper = pkb.upper {
             if pkb.proto == IP_PROTOCOL_ICMP || pkb.proto == IP_PROTOCOL_ICMPv6 {
-                let icmp: UnsafePointer<swvs_icmp_hdr> = Convert.ptr2ptrUnsafe(upper)
+                let icmp: UnsafePointer<swvs_icmp_hdr> = Unsafe.ptr2ptrUnsafe(upper)
                 upperCsum = icmp.pointee.csum
                 if upperCsum.0 != 0 || upperCsum.1 != 0 {
                     checkUpper = true
                 }
             } else if pkb.proto == IP_PROTOCOL_TCP {
-                let tcp: UnsafePointer<swvs_tcphdr> = Convert.ptr2ptrUnsafe(upper)
+                let tcp: UnsafePointer<swvs_tcphdr> = Unsafe.ptr2ptrUnsafe(upper)
                 upperCsum = tcp.pointee.csum
                 checkUpper = true
             } else if pkb.proto == IP_PROTOCOL_UDP {
-                let udp: UnsafePointer<swvs_udphdr> = Convert.ptr2ptrUnsafe(upper)
+                let udp: UnsafePointer<swvs_udphdr> = Unsafe.ptr2ptrUnsafe(upper)
                 upperCsum = udp.pointee.csum
                 if upperCsum.0 != 0 || upperCsum.1 != 0 {
                     checkUpper = true
@@ -280,11 +280,11 @@ open class DevInput: Node {
         }
 
         // recalc
-        vproxy_pkt_ether_csum(Convert.ptr2mutUnsafe(pkb.raw), Int32(pkb.pktlen), VPROXY_CSUM_ALL)
+        vproxy_pkt_ether_csum(Unsafe.ptr2mutUnsafe(pkb.raw), Int32(pkb.pktlen), VPROXY_CSUM_ALL)
 
         // check
         if pkb.ethertype == ETHER_TYPE_IPv4 {
-            let ip: UnsafePointer<swvs_ipv4hdr> = Convert.ptr2ptrUnsafe(ip)
+            let ip: UnsafePointer<swvs_ipv4hdr> = Unsafe.ptr2ptrUnsafe(ip)
             let newCsum = ip.pointee.csum
             if newCsum != ipCsum {
                 assert(Logger.lowLevelDebug("invalid ip csum: expecting \(ipCsum), but got \(newCsum)"))
@@ -293,21 +293,21 @@ open class DevInput: Node {
         }
         if checkUpper, let upper = pkb.upper {
             if pkb.proto == IP_PROTOCOL_ICMP || pkb.proto == IP_PROTOCOL_ICMPv6 {
-                let icmp: UnsafePointer<swvs_icmp_hdr> = Convert.ptr2ptrUnsafe(upper)
+                let icmp: UnsafePointer<swvs_icmp_hdr> = Unsafe.ptr2ptrUnsafe(upper)
                 let newCsum = icmp.pointee.csum
                 if newCsum != upperCsum {
                     assert(Logger.lowLevelDebug("invalid icmp4|6 csum: expecting \(upperCsum), but got \(newCsum)"))
                     return true
                 }
             } else if pkb.proto == IP_PROTOCOL_TCP {
-                let tcp: UnsafePointer<swvs_tcphdr> = Convert.ptr2ptrUnsafe(upper)
+                let tcp: UnsafePointer<swvs_tcphdr> = Unsafe.ptr2ptrUnsafe(upper)
                 let newCsum = tcp.pointee.csum
                 if newCsum != upperCsum {
                     assert(Logger.lowLevelDebug("invalid tcp csum: expecting \(upperCsum), but got \(newCsum)"))
                     return true
                 }
             } else if pkb.proto == IP_PROTOCOL_UDP {
-                let udp: UnsafePointer<swvs_udphdr> = Convert.ptr2ptrUnsafe(upper)
+                let udp: UnsafePointer<swvs_udphdr> = Unsafe.ptr2ptrUnsafe(upper)
                 let newCsum = udp.pointee.csum
                 if newCsum != upperCsum {
                     assert(Logger.lowLevelDebug("invalid udp csum: expecting \(upperCsum), but got \(newCsum)"))
@@ -391,13 +391,13 @@ class DevOutput: Node {
                 if let ip = pkb.ip {
                     var out = vproxy_csum_out()
                     if pkb.ethertype == ETHER_TYPE_IPv4 {
-                        vproxy_pkt_ipv4_csum(Convert.ptr2mutUnsafe(ip), Int32(pkb.lengthFromIpToEnd), VPROXY_CSUM_ALL, &out)
+                        vproxy_pkt_ipv4_csum(Unsafe.ptr2mutUnsafe(ip), Int32(pkb.lengthFromIpToEnd), VPROXY_CSUM_ALL, &out)
                     } else if pkb.ethertype == ETHER_TYPE_IPv6 {
-                        vproxy_pkt_ipv6_csum(Convert.ptr2mutUnsafe(ip), Int32(pkb.lengthFromIpToEnd), VPROXY_CSUM_ALL, &out)
+                        vproxy_pkt_ipv6_csum(Unsafe.ptr2mutUnsafe(ip), Int32(pkb.lengthFromIpToEnd), VPROXY_CSUM_ALL, &out)
                     }
                 }
             } else {
-                vproxy_pkt_ether_csum(Convert.ptr2mutUnsafe(pkb.raw), Int32(pkb.pktlen), VPROXY_CSUM_ALL)
+                vproxy_pkt_ether_csum(Unsafe.ptr2mutUnsafe(pkb.raw), Int32(pkb.pktlen), VPROXY_CSUM_ALL)
             }
             pkb.csumState = .COMPLETE
         }

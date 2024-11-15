@@ -121,7 +121,7 @@ class ArpInput: Node {
             assert(Logger.lowLevelDebug("not valid arp packet"))
             return sched.schedule(pkb, to: drop)
         }
-        let arp: UnsafeMutablePointer<swvs_arp> = Convert.ptr2mutUnsafe(raw)
+        let arp: UnsafeMutablePointer<swvs_arp> = Unsafe.ptr2mutUnsafe(raw)
         if arp.pointee.be_arp_opcode == BE_ARP_PROTOCOL_OPCODE_REQ ||
             arp.pointee.be_arp_opcode == BE_ARP_PROTOCOL_OPCODE_RESP
         {
@@ -159,8 +159,8 @@ class ArpReqInput: Node {
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
-        let ether: UnsafeMutablePointer<swvs_ethhdr> = Convert.ptr2mutUnsafe(pkb.raw)
-        let arp: UnsafeMutablePointer<swvs_arp> = Convert.ptr2mutUnsafe(pkb.ip!)
+        let ether: UnsafeMutablePointer<swvs_ethhdr> = Unsafe.ptr2mutUnsafe(pkb.raw)
+        let arp: UnsafeMutablePointer<swvs_arp> = Unsafe.ptr2mutUnsafe(pkb.ip!)
         let target = pkb.ipDst as! IPv4
         let ifaces = pkb.netstack!.ipv4[target]
         guard let ifaces else {
@@ -285,7 +285,7 @@ class IcmpInput: Node {
             assert(Logger.lowLevelDebug("not valid icmp"))
             return sched.schedule(pkb, to: drop)
         }
-        let icmp: UnsafePointer<swvs_icmp_hdr> = Convert.ptr2ptrUnsafe(upper)
+        let icmp: UnsafePointer<swvs_icmp_hdr> = Unsafe.ptr2ptrUnsafe(upper)
         if icmp.pointee.type == ICMP_PROTOCOL_TYPE_ECHO_REQ {
             return sched.schedule(pkb, to: pingReqInput)
         } else {
@@ -308,19 +308,19 @@ class PingReqInput: Node {
     }
 
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
-        let icmp: UnsafeMutablePointer<swvs_icmp_hdr> = Convert.ptr2mutUnsafe(pkb.upper!)
+        let icmp: UnsafeMutablePointer<swvs_icmp_hdr> = Unsafe.ptr2mutUnsafe(pkb.upper!)
         if icmp.pointee.code != 0 {
             assert(Logger.lowLevelDebug("icmp req (ping) code is not 0"))
             return sched.schedule(pkb, to: drop)
         }
 
         if pkb.ipDst is IPv4 {
-            let ip: UnsafeMutablePointer<swvs_ipv4hdr> = Convert.ptr2mutUnsafe(pkb.ip!)
+            let ip: UnsafeMutablePointer<swvs_ipv4hdr> = Unsafe.ptr2mutUnsafe(pkb.ip!)
             pkb.ipSrc!.copyInto(&ip.pointee.dst)
             pkb.ipDst!.copyInto(&ip.pointee.src)
             icmp.pointee.type = ICMP_PROTOCOL_TYPE_ECHO_RESP
         } else {
-            let ip: UnsafeMutablePointer<swvs_ipv6hdr> = Convert.ptr2mutUnsafe(pkb.ip!)
+            let ip: UnsafeMutablePointer<swvs_ipv6hdr> = Unsafe.ptr2mutUnsafe(pkb.ip!)
             pkb.ipSrc!.copyInto(&ip.pointee.dst)
             pkb.ipDst!.copyInto(&ip.pointee.src)
             icmp.pointee.type = ICMPv6_PROTOCOL_TYPE_ECHO_RESP
@@ -388,7 +388,7 @@ class Icmp6Input: Node {
             return sched.schedule(pkb, to: drop)
         }
 
-        let icmp6: UnsafeMutablePointer<swvs_icmp_hdr> = Convert.ptr2mutUnsafe(upper)
+        let icmp6: UnsafeMutablePointer<swvs_icmp_hdr> = Unsafe.ptr2mutUnsafe(upper)
         if icmp6.pointee.type == ICMPv6_PROTOCOL_TYPE_ECHO_REQ {
             return sched.schedule(pkb, to: pingReqInput)
         } else if icmp6.pointee.type == ICMPv6_PROTOCOL_TYPE_Neighbor_Solicitation {
@@ -453,7 +453,7 @@ class NdpNsInput: Node {
                     assert(Logger.lowLevelDebug("invalid icmpv6 opt length"))
                     break
                 }
-                opt = pkb.getAs(Convert.advance(mut: opt2, inc: inc))
+                opt = pkb.getAs(Unsafe.advance(mut: opt2, inc: inc))
                 continue
             }
             if opt2.pointee.len != 1 {
@@ -486,15 +486,15 @@ class NdpNsInput: Node {
             }
         }
 
-        let ether: UnsafeMutablePointer<swvs_ethhdr> = Convert.ptr2mutUnsafe(pkb.raw)
+        let ether: UnsafeMutablePointer<swvs_ethhdr> = Unsafe.ptr2mutUnsafe(pkb.raw)
 
         pkb.srcmac!.copyInto(&ether.pointee.dst)
 
-        let ip: UnsafeMutablePointer<swvs_ipv6hdr> = Convert.ptr2mutUnsafe(pkb.ip!)
+        let ip: UnsafeMutablePointer<swvs_ipv6hdr> = Unsafe.ptr2mutUnsafe(pkb.ip!)
         pkb.ipSrc!.copyInto(&ip.pointee.dst)
         target.copyInto(&ip.pointee.src)
 
-        let icmpRes: UnsafeMutablePointer<swvs_compose_icmpv6_na_tlla> = Convert.ptr2mutUnsafe(icmp)
+        let icmpRes: UnsafeMutablePointer<swvs_compose_icmpv6_na_tlla> = Unsafe.ptr2mutUnsafe(icmp)
         icmpRes.pointee.icmp.type = ICMPv6_PROTOCOL_TYPE_Neighbor_Advertisement
         icmpRes.pointee.icmp.code = 0
         icmpRes.pointee.opt.type = ICMPv6_OPTION_TYPE_Target_Link_Layer_Address
@@ -509,8 +509,8 @@ class NdpNsInput: Node {
         } else {
             assert(Logger.lowLevelDebug("need to shrink packet total length: \(lenDelta)"))
         }
-        ip.pointee.be_payload_len = Convert.reverseByteOrder(Convert.reverseByteOrder(
-            ip.pointee.be_payload_len - UInt16(lenDelta)))
+        ip.pointee.be_payload_len = Utils.byteOrderConvert(Utils.byteOrderConvert(
+            ip.pointee.be_payload_len) - UInt16(lenDelta))
 
         pkb.clearPacketInfo(from: .ETHER)
         pkb.outputIface = pkb.inputIface
@@ -553,7 +553,7 @@ class NdpNaInput: Node {
                     assert(Logger.lowLevelDebug("invalid icmpv6 opt length"))
                     break
                 }
-                opt = pkb.getAs(Convert.advance(mut: opt2, inc: inc))
+                opt = pkb.getAs(Unsafe.advance(mut: opt2, inc: inc))
                 continue
             }
             if opt2.pointee.len != 1 {
@@ -636,7 +636,7 @@ class IPRouteForward: Node {
     override func schedule(_ pkb: PacketBuffer, _ sched: inout Scheduler) {
         assert(pkb.outputRouteRule != nil)
         if pkb.ethertype == ETHER_TYPE_IPv4 {
-            let ip: UnsafeMutablePointer<swvs_ipv4hdr> = Convert.ptr2mutUnsafe(pkb.ip!)
+            let ip: UnsafeMutablePointer<swvs_ipv4hdr> = Unsafe.ptr2mutUnsafe(pkb.ip!)
             if ip.pointee.time_to_live <= 1 {
                 assert(Logger.lowLevelDebug("received TTL <= 1 packet: \(pkb)"))
                 return sched.schedule(pkb, to: drop)
@@ -644,7 +644,7 @@ class IPRouteForward: Node {
             ip.pointee.time_to_live -= 1
         } else {
             assert(pkb.ethertype == ETHER_TYPE_IPv6)
-            let ip: UnsafeMutablePointer<swvs_ipv6hdr> = Convert.ptr2mutUnsafe(pkb.ip!)
+            let ip: UnsafeMutablePointer<swvs_ipv6hdr> = Unsafe.ptr2mutUnsafe(pkb.ip!)
             if ip.pointee.hop_limits <= 1 {
                 assert(Logger.lowLevelDebug("received TTL <= 1 packet: \(pkb)"))
                 return sched.schedule(pkb, to: drop)
@@ -691,7 +691,7 @@ class IPRouteLinkOutput: Node {
         if let mac {
             assert(Logger.lowLevelDebug("mac for \(lookupMacByIp) already exists: \(mac)"))
 
-            let ether: UnsafeMutablePointer<swvs_ethhdr> = Convert.ptr2mutUnsafe(pkb.raw)
+            let ether: UnsafeMutablePointer<swvs_ethhdr> = Unsafe.ptr2mutUnsafe(pkb.raw)
             mac.copyInto(&ether.pointee.dst)
             pkb.outputIface = outputIface
             return sched.schedule(pkb, to: ethernetOutput)
@@ -899,15 +899,15 @@ class TcpNatInput: Node {
             return sched.schedule(pkb, to: drop)
         }
 
-        let tcp: UnsafeMutablePointer<swvs_tcphdr> = Convert.ptr2mutUnsafe(pkb.upper!)
+        let tcp: UnsafeMutablePointer<swvs_tcphdr> = Unsafe.ptr2mutUnsafe(pkb.upper!)
 
         if conn.isBeforeNat {
             tcpStateTransfer(clientConn: conn, serverConn: peer, tcpFlags: tcp.pointee.flags, isFromClient: conn.isBeforeNat)
         } else {
             tcpStateTransfer(clientConn: peer, serverConn: conn, tcpFlags: tcp.pointee.flags, isFromClient: conn.isBeforeNat)
         }
-        tcp.pointee.be_dst_port = Convert.reverseByteOrder(peer.tup.srcPort)
-        tcp.pointee.be_src_port = Convert.reverseByteOrder(peer.tup.dstPort)
+        tcp.pointee.be_dst_port = Utils.byteOrderConvert(peer.tup.srcPort)
+        tcp.pointee.be_src_port = Utils.byteOrderConvert(peer.tup.dstPort)
         // NO! do not call this: pkb.clearPacketInfo(only: .UPPER)
         // the tuple would be used by nat-output and the packet info will be cleared there
         conn.resetTimer()
@@ -934,15 +934,15 @@ class UdpNatInput: Node {
             return sched.schedule(pkb, to: drop)
         }
 
-        let udp: UnsafeMutablePointer<swvs_udphdr> = Convert.ptr2mutUnsafe(pkb.upper!)
+        let udp: UnsafeMutablePointer<swvs_udphdr> = Unsafe.ptr2mutUnsafe(pkb.upper!)
 
         if conn.isBeforeNat {
             udpStateTransfer(clientConn: conn, serverConn: peer, isFromClient: conn.isBeforeNat)
         } else {
             udpStateTransfer(clientConn: peer, serverConn: conn, isFromClient: conn.isBeforeNat)
         }
-        udp.pointee.be_dst_port = Convert.reverseByteOrder(peer.tup.srcPort)
-        udp.pointee.be_src_port = Convert.reverseByteOrder(peer.tup.dstPort)
+        udp.pointee.be_dst_port = Utils.byteOrderConvert(peer.tup.srcPort)
+        udp.pointee.be_src_port = Utils.byteOrderConvert(peer.tup.dstPort)
         // NO! do not call this: pkb.clearPacketInfo(only: .UPPER)
         // the tuple would be used by nat-output and the packet info will be cleared there
         conn.resetTimer()

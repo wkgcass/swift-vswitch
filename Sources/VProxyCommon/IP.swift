@@ -64,12 +64,12 @@ public struct IPv4: IP {
     }
 
     private static func format(_ p: UnsafeRawPointer) -> (UInt8, UInt8, UInt8, UInt8) {
-        let u8p: UnsafePointer<UInt8> = Convert.raw2ptr(p)
+        let u8p: UnsafePointer<UInt8> = Unsafe.raw2ptr(p)
         return (u8p.pointee, u8p.advanced(by: 1).pointee, u8p.advanced(by: 2).pointee, u8p.advanced(by: 3).pointee)
     }
 
     public init(raw bytes: UnsafeRawPointer) {
-        let u8p: UnsafePointer<UInt8> = Convert.raw2ptr(bytes)
+        let u8p: UnsafePointer<UInt8> = Unsafe.raw2ptr(bytes)
         self.bytes = (u8p.pointee, u8p.advanced(by: 1).pointee,
                       u8p.advanced(by: 2).pointee, u8p.advanced(by: 3).pointee)
     }
@@ -79,7 +79,7 @@ public struct IPv4: IP {
     }
 
     public func copyInto(_ p: UnsafeMutableRawPointer) {
-        let u8p: UnsafeMutablePointer<UInt8> = Convert.mutraw2mutptr(p)
+        let u8p: UnsafeMutablePointer<UInt8> = Unsafe.mutraw2mutptr(p)
         u8p.pointee = bytes.0
         u8p.advanced(by: 1).pointee = bytes.1
         u8p.advanced(by: 2).pointee = bytes.2
@@ -138,7 +138,7 @@ public struct IPv6: IP {
                                                           UInt8, UInt8, UInt8, UInt8,
                                                           UInt8, UInt8, UInt8, UInt8)
     {
-        let u8p: UnsafePointer<UInt8> = Convert.raw2ptr(p)
+        let u8p: UnsafePointer<UInt8> = Unsafe.raw2ptr(p)
         return (u8p.pointee, u8p.advanced(by: 1).pointee, u8p.advanced(by: 2).pointee, u8p.advanced(by: 3).pointee,
                 u8p.advanced(by: 4).pointee, u8p.advanced(by: 5).pointee, u8p.advanced(by: 6).pointee, u8p.advanced(by: 7).pointee,
                 u8p.advanced(by: 8).pointee, u8p.advanced(by: 9).pointee, u8p.advanced(by: 10).pointee, u8p.advanced(by: 11).pointee,
@@ -146,7 +146,7 @@ public struct IPv6: IP {
     }
 
     public init(raw bytes: UnsafeRawPointer) {
-        let u8p: UnsafePointer<UInt8> = Convert.raw2ptr(bytes)
+        let u8p: UnsafePointer<UInt8> = Unsafe.raw2ptr(bytes)
         self.bytes = (
             u8p.pointee, u8p.advanced(by: 1).pointee, u8p.advanced(by: 2).pointee, u8p.advanced(by: 3).pointee,
             u8p.advanced(by: 4).pointee, u8p.advanced(by: 5).pointee, u8p.advanced(by: 6).pointee, u8p.advanced(by: 7).pointee,
@@ -164,7 +164,7 @@ public struct IPv6: IP {
     }
 
     public func copyInto(_ p: UnsafeMutableRawPointer) {
-        let u8p: UnsafeMutablePointer<UInt8> = Convert.mutraw2mutptr(p)
+        let u8p: UnsafeMutablePointer<UInt8> = Unsafe.mutraw2mutptr(p)
         u8p.pointee = bytes.0
         u8p.advanced(by: 1).pointee = bytes.1
         u8p.advanced(by: 2).pointee = bytes.2

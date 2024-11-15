@@ -242,6 +242,6 @@ class AESelector: FDSelector {
     }
 
     func getFiredExtra() -> (Int, UnsafePointer<FiredExtra>) {
-        return (Int(ae.pointee.firedExtraNum), Convert.ptr2ptrUnsafe(ae.pointee.firedExtra))
+        return (Int(ae.pointee.firedExtraNum), Unsafe.ptr2ptrUnsafe(ae.pointee.firedExtra))
     }
 }
