@@ -1,19 +1,22 @@
 import VProxyCommon
 
 public class IfaceEx: CustomStringConvertible, Hashable {
+    public var id: UInt32
     public let iface: any Iface
 
-    public convenience init(_ iface: any Iface, toBridge: UInt32) {
-        self.init(iface, params: IfaceExParams(), toBridge: toBridge)
+    public convenience init(_ id: UInt32, _ iface: any Iface, toBridge: UInt32) {
+        self.init(id, iface, params: IfaceExParams(), toBridge: toBridge)
     }
 
-    public init(_ iface: any Iface, params: IfaceExParams, toBridge: UInt32) {
+    public init(_ id: UInt32, _ iface: any Iface, params: IfaceExParams, toBridge: UInt32) {
+        self.id = id
         self.iface = iface
         self.toBridge = toBridge
         mac = iface.meta.initialMac ?? params.mac
     }
 
-    public init(_ iface: any Iface, params: IfaceExParams, toNetstack: UInt32) {
+    public init(_ id: UInt32, _ iface: any Iface, params: IfaceExParams, toNetstack: UInt32) {
+        self.id = id
         self.iface = iface
         self.toNetstack = toNetstack
         mac = iface.meta.initialMac ?? params.mac

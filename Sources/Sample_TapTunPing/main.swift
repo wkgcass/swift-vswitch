@@ -92,8 +92,7 @@ struct TapTunPingSample: ParsableCommand {
                 try sw.register(tun, netstack: 1)
                 for ipmask in ipmasks {
                     sw.configure { _, sw in
-                        sw.addAddress(ipmask!.ip, dev: tun.name)
-                        sw.addRoute(ipmask!.network, dev: tun.name, src: ipmask!.ip)
+                        sw.addAddress(ipmask, dev: tun.name)
                     }
                 }
             }
@@ -105,8 +104,7 @@ struct TapTunPingSample: ParsableCommand {
                 try sw.register(tap, netstack: 1)
                 for ipmask in ipmasks {
                     sw.configure { _, sw in
-                        sw.addAddress(ipmask!.ip, dev: tap.name)
-                        sw.addRoute(ipmask!.network, dev: tap.name, src: ipmask!.ip)
+                        sw.addAddress(ipmask, dev: tap.name)
                     }
                 }
             }

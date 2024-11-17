@@ -3,6 +3,7 @@ import Darwin
 #else
 import Glibc
 #endif
+import Atomics
 import Collections
 import SwiftEventLoopCommon
 import SwiftVSwitchCHelper
@@ -14,6 +15,7 @@ public class VSwitch {
     private var threads: [VSwitchPerThread]
     private var master_: VSwitchPerThread? // is also inside 'threads' array
     private var master: VSwitchPerThread { master_! }
+    private let ifIndex = ManagedAtomic<UInt32>(0)
 
     public init(params: VSwitchParams) throws(IOException) {
         self.params = params
@@ -34,7 +36,7 @@ public class VSwitch {
                 }
                 throw error
             }
-            let perthread = VSwitchPerThread(index: idx, loop: loop, params: params, parent: self)
+            let perthread = VSwitchPerThread(index: idx + 1, loop: loop, params: params, parent: self)
             threads.append(perthread)
         }
     }
@@ -44,11 +46,39 @@ public class VSwitch {
     }
 
     public func configure(_ f: @escaping (Int, VSwitchPerThread) -> Void) {
-        master.loop.blockUntilFinish {
-            for (tid, sw) in self.threads.enumerated() {
-                f(tid, sw)
-            }
+        let _: AnyObject? = configure { tid, sw in
+            f(tid, sw)
+            return nil
         }
+    }
+
+    public func configure<T: AnyObject>(_ f: @escaping (Int, VSwitchPerThread) -> T?) -> T? {
+        master.loop.blockUntilResult {
+            var masterRes: T?
+            for (tid, sw) in self.threads.enumerated() {
+                let res = f(tid, sw)
+                if tid == 0 {
+                    masterRes = res
+                }
+            }
+            return masterRes
+        }
+    }
+
+    public func query<T: AnyObject>(_ f: @escaping (VSwitchPerThread) -> T?) -> T? {
+        return master.loop.blockUntilResult { f(self.master) }
+    }
+
+    public func queryWithErr<T: AnyObject>(_ f: @escaping (VSwitchPerThread) throws -> T?) throws -> T? {
+        return try master.loop.blockUntilResultWithErr { try f(self.master) }
+    }
+
+    public func queryWorker<T: AnyObject>(_ f: @escaping (VSwitchPerThread) -> T?) -> T? {
+        return threads[1].loop.blockUntilResult { f(self.threads[1]) }
+    }
+
+    public func queryWorkerWithErr<T: AnyObject>(_ f: @escaping (VSwitchPerThread) throws -> T?) throws -> T? {
+        return try threads[1].loop.blockUntilResultWithErr { try f(self.threads[1]) }
     }
 
     public func foreachWorker(_ f: @escaping (VSwitchPerThread) -> Void) {
@@ -58,6 +88,25 @@ public class VSwitch {
                 sw.loop.runOnLoop { f(sw) }
             }
         }
+    }
+
+    public func blockForeachWorker(_ f: @escaping (VSwitchPerThread) -> Void) {
+        master.loop.blockUntilFinish {
+            for i in 1 ..< self.threads.count {
+                let sw = self.threads[i]
+                sw.loop.blockUntilFinish { f(sw) }
+            }
+        }
+    }
+
+    public func queryEachWorker<T: AnyObject>(_ f: @escaping (VSwitchPerThread) -> T?) -> [T?] {
+        var allRes = [T?]()
+        for i in 1 ..< threads.count {
+            let sw = threads[i]
+            let res = sw.loop.blockUntilResult { f(sw) }
+            allRes.append(res)
+        }
+        return allRes
     }
 
     public func start() {
@@ -97,14 +146,16 @@ public class VSwitch {
     }
 
     public func register(_ ifaceProvider: IfacePerThreadProvider, bridge: UInt32) throws(IOException) {
+        let id = ifIndex.wrappingIncrementThenLoad(ordering: .relaxed)
         try register(ifaceProvider) { sw, iface, params throws(IOException) in
-            try sw.register(iface: iface, params: params, bridge: bridge)
+            try sw.register(id: id, iface: iface, params: params, bridge: bridge)
         }
     }
 
     public func register(_ ifaceProvider: IfacePerThreadProvider, netstack: UInt32) throws(IOException) {
+        let id = ifIndex.wrappingIncrementThenLoad(ordering: .relaxed)
         try register(ifaceProvider) { sw, iface, params throws(IOException) in
-            try sw.register(iface: iface, params: params, netstack: netstack)
+            try sw.register(id: id, iface: iface, params: params, netstack: netstack)
         }
     }
 
@@ -165,7 +216,7 @@ public class VSwitchPerThread {
     private let params: VSwitchParams
     private let ethswNodes: NodeManager
     private let netstackNodes: NetStackNodeManager
-    public private(set) var ifaces = [String: IfaceEx]()
+    public private(set) var ifaces = [UInt32: IfaceEx]()
     public private(set) var bridges = [UInt32: Bridge]()
     public private(set) var netstacks = [UInt32: NetStack]()
     private let redirected = ConcurrentQueue<PacketBufferForRedirecting>()
@@ -303,7 +354,7 @@ public class VSwitchPerThread {
         return true
     }
 
-    func register(iface: any Iface, params: IfaceExParams, bridge: UInt32) throws(IOException) {
+    func register(id: UInt32, iface: any Iface, params: IfaceExParams, bridge: UInt32) throws(IOException) {
         if iface.meta.property.layer != .ETHER {
             throw IOException("\(iface.name) is not ethernet iface")
         }
@@ -314,11 +365,11 @@ public class VSwitchPerThread {
             loop: loop
         ))
         loop.blockUntilFinish {
-            self.ifaces[iface.name] = IfaceEx(iface, params: params, toBridge: bridge)
+            self.ifaces[id] = IfaceEx(id, iface, params: params, toBridge: bridge)
         }
     }
 
-    func register(iface: any Iface, params: IfaceExParams, netstack: UInt32) throws(IOException) {
+    func register(id: UInt32, iface: any Iface, params: IfaceExParams, netstack: UInt32) throws(IOException) {
         if ifaces.values.contains(where: { i in i.iface.handle() == iface.handle() }) {
             throw IOException("already registered")
         }
@@ -326,13 +377,34 @@ public class VSwitchPerThread {
             loop: loop
         ))
         loop.blockUntilFinish {
-            self.ifaces[iface.name] = IfaceEx(iface, params: params, toNetstack: netstack)
+            self.ifaces[id] = IfaceEx(id, iface, params: params, toNetstack: netstack)
         }
+    }
+
+    private func getIndexOf(iface: String) -> UInt32? {
+        for (id_, iface_) in ifaces {
+            if iface_.name == iface {
+                return id_
+            }
+        }
+        return nil
+    }
+
+    private func getIfaceWith(name: String) -> IfaceEx? {
+        for (_, iface_) in ifaces {
+            if iface_.name == name {
+                return iface_
+            }
+        }
+        return nil
     }
 
     public func remove(name: String) {
         loop.blockUntilFinish {
-            if let ex = self.ifaces.removeValue(forKey: name) {
+            guard let id = self.getIndexOf(iface: name) else {
+                return
+            }
+            if let ex = self.ifaces.removeValue(forKey: id) {
                 ex.iface.close()
             }
         }
@@ -379,7 +451,7 @@ public class VSwitchPerThread {
     }
 
     private func getDevAndNetstack(dev: String) -> (IfaceEx, NetStack)? {
-        guard let iface = ifaces[dev] else {
+        guard let iface = getIfaceWith(name: dev) else {
             Logger.warn(.INVALID_INPUT_DATA, "dev \(dev) not found")
             return nil
         }
@@ -394,27 +466,29 @@ public class VSwitchPerThread {
         return (iface, ns)
     }
 
-    public func addAddress(_ ip: (any IP)?, dev: String) {
-        guard let ip else {
+    public func addAddress(_ ipmask: (any IPMask)?, dev: String) {
+        guard let ipmask else {
             return
         }
         loop.blockUntilFinish {
             guard let (iface, ns) = self.getDevAndNetstack(dev: dev) else {
                 return
             }
-            ns.addIp(ip, dev: iface)
+            ns.ips.addIp(ipmask, dev: iface)
+            ns.routeTable.addRule(RouteTable.RouteRule(rule: ipmask.network, dev: iface, src: ipmask.ip))
         }
     }
 
-    public func delAddress(_ ip: (any IP)?, dev: String) {
-        guard let ip else {
+    public func delAddress(_ ipmask: (any IPMask)?, dev: String) {
+        guard let ipmask else {
             return
         }
         loop.blockUntilFinish {
             guard let (iface, ns) = self.getDevAndNetstack(dev: dev) else {
                 return
             }
-            ns.removeIp(ip, dev: iface)
+            ns.ips.removeIp(ipmask, dev: iface)
+            ns.routeTable.delRule(ipmask.network)
         }
     }
 

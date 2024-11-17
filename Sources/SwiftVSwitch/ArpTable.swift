@@ -12,20 +12,35 @@ public class ArpTable: CustomStringConvertible {
     }
 
     public private(set) var entries = Set<ArpEntry>()
-    private var ip4Map = [IPv4: ArpEntry]()
-    private var ip6Map = [IPv6: ArpEntry]()
-    private var macMap = [MacAddress: Set<ArpEntry>]()
+    private var ip4Map = [IPv4Dev: ArpEntry]()
+    private var ip6Map = [IPv6Dev: ArpEntry]()
+    private var macMap = [MacDev: Set<ArpEntry>]()
 
-    public func record(mac: MacAddress, ip: any IP) {
-        record(mac: mac, ip: ip, persist: false)
+    private struct IPv4Dev: Hashable {
+        let ip: IPv4
+        let dev: IfaceHandle
     }
 
-    public func record(mac: MacAddress, ip: any IP, persist: Bool) {
+    private struct IPv6Dev: Hashable {
+        let ip: IPv6
+        let dev: IfaceHandle
+    }
+
+    private struct MacDev: Hashable {
+        let mac: MacAddress
+        let dev: IfaceHandle
+    }
+
+    public func record(mac: MacAddress, ip: any IP, dev: IfaceEx) {
+        record(mac: mac, ip: ip, dev: dev, persist: false)
+    }
+
+    public func record(mac: MacAddress, ip: any IP, dev: IfaceEx, persist: Bool) {
         let entry: ArpEntry?
         if let v4 = ip as? IPv4 {
-            entry = ip4Map[v4]
+            entry = ip4Map[IPv4Dev(ip: v4, dev: dev.handle())]
         } else if let v6 = ip as? IPv6 {
-            entry = ip6Map[v6]
+            entry = ip6Map[IPv6Dev(ip: v6, dev: dev.handle())]
         } else {
             entry = nil
         }
@@ -44,22 +59,22 @@ public class ArpTable: CustomStringConvertible {
         }
 
         // otherwise need to overwrite the entry
-        let entryNew = ArpEntry(parent: self, mac: mac, ip: ip, persist: persist)
+        let entryNew = ArpEntry(parent: self, mac: mac, ip: ip, dev: dev, persist: persist)
         entryNew.record()
     }
 
-    public func lookup(ip: any IP) -> MacAddress? {
+    public func lookup(ip: any IP, dev: IfaceEx) -> MacAddress? {
         if let v4 = ip as? IPv4 {
-            return ip4Map[v4]?.mac
+            return ip4Map[IPv4Dev(ip: v4, dev: dev.handle())]?.mac
         } else if let v6 = ip as? IPv6 {
-            return ip6Map[v6]?.mac
+            return ip6Map[IPv6Dev(ip: v6, dev: dev.handle())]?.mac
         } else {
             return nil
         }
     }
 
-    public func lookupByMac(mac: MacAddress) -> Set<ArpEntry>? {
-        return macMap[mac]
+    public func lookupByMac(mac: MacAddress, dev: IfaceEx) -> Set<ArpEntry>? {
+        return macMap[MacDev(mac: mac, dev: dev.handle())]
     }
 
     public func setTimeout(_ timeout: Int) {
@@ -78,8 +93,8 @@ public class ArpTable: CustomStringConvertible {
         }
     }
 
-    public func remove(mac: MacAddress) {
-        if let entries = macMap[mac] {
+    public func remove(mac: MacAddress, dev: IfaceEx) {
+        if let entries = macMap[MacDev(mac: mac, dev: dev.handle())] {
             for entry in entries {
                 entry.cancel()
             }
@@ -96,36 +111,40 @@ public class ArpTable: CustomStringConvertible {
 
     public class ArpEntry: Timer, Hashable, CustomStringConvertible {
         let parent: ArpTable
-        let mac: MacAddress
-        let ip: any IP
+        public let mac: MacAddress
+        public let ip: any IP
+        public let dev: IfaceEx
 
-        init(parent: ArpTable, mac: MacAddress, ip: any IP, persist: Bool) {
+        init(parent: ArpTable, mac: MacAddress, ip: any IP, dev: IfaceEx, persist: Bool) {
             self.parent = parent
             self.mac = mac
             self.ip = ip
+            self.dev = dev
             super.init(loop: parent.loop, timeoutMillis: persist ? -1 : parent.params.arpTableTimeoutMillis)
         }
 
         func record() {
             if let v4 = ip as? IPv4 {
-                let entry = parent.ip4Map[v4]
+                let entry = parent.ip4Map[IPv4Dev(ip: v4, dev: dev.handle())]
                 if let entry {
                     entry.cancel()
                 }
-                parent.ip4Map[v4] = self
+                parent.ip4Map[IPv4Dev(ip: v4, dev: dev.handle())] = self
             } else {
                 let v6 = ip as! IPv6
-                let entry = parent.ip6Map[v6]
+                let key = IPv6Dev(ip: v6, dev: dev.handle())
+                let entry = parent.ip6Map[key]
                 if let entry {
                     entry.cancel()
                 }
-                parent.ip6Map[v6] = self
+                parent.ip6Map[key] = self
             }
             parent.entries.insert(self)
-            if !parent.macMap.keys.contains(mac) {
-                parent.macMap[mac] = Set()
+            let key = MacDev(mac: mac, dev: dev.handle())
+            if !parent.macMap.keys.contains(key) {
+                parent.macMap[key] = Set()
             }
-            parent.macMap[mac]!.insert(self)
+            parent.macMap[MacDev(mac: mac, dev: dev.handle())]!.insert(self)
             resetTimer()
 
             Logger.trace(LogType.ALERT, "arp entry \(mac) -> \(ip) recorded")
@@ -138,15 +157,16 @@ public class ArpTable: CustomStringConvertible {
 
             parent.entries.remove(self)
             if let v4 = ip as? IPv4 {
-                parent.ip4Map.removeValue(forKey: v4)
+                parent.ip4Map.removeValue(forKey: IPv4Dev(ip: v4, dev: dev.handle()))
             } else {
                 let v6 = ip as! IPv6
-                parent.ip6Map.removeValue(forKey: v6)
+                parent.ip6Map.removeValue(forKey: IPv6Dev(ip: v6, dev: dev.handle()))
             }
-            if parent.macMap[mac] != nil {
-                parent.macMap[mac]!.remove(self)
-                if parent.macMap[mac]!.isEmpty {
-                    parent.macMap.removeValue(forKey: mac)
+            let key = MacDev(mac: mac, dev: dev.handle())
+            if parent.macMap[key] != nil {
+                parent.macMap[key]!.remove(self)
+                if parent.macMap[key]!.isEmpty {
+                    parent.macMap.removeValue(forKey: key)
                 }
             }
         }

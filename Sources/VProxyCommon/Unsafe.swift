@@ -102,7 +102,7 @@ public class Unsafe {
     }
 
     @inlinable @inline(__always)
-    public static func convertToNativeAddRef<T: AnyObject>(_ value: T) -> UnsafeMutableRawPointer {
+    public static func convertToNativeIncRef<T: AnyObject>(_ value: T) -> UnsafeMutableRawPointer {
         return Unmanaged<T>.passRetained(value).toOpaque()
     }
 

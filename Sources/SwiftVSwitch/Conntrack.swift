@@ -1,6 +1,5 @@
 import Atomics
 import SwiftEventLoopCommon
-import SwiftVSwitchVirtualServerBase
 import VProxyCommon
 
 public class Conntrack {
@@ -17,7 +16,8 @@ public class Conntrack {
         return conns[tup]
     }
 
-    public func put(_ tup: PktTuple, _ conn: Connection) {
+    public func put(_ conn: Connection) {
+        let tup = conn.tup
         let oldConn = conns.removeValue(forKey: tup)
         if let oldConn {
             if let peer = oldConn.peer {
@@ -26,39 +26,75 @@ public class Conntrack {
             oldConn.destroy(touchConntrack: false, touchPeer: false)
         }
 
-        let entry = global.put(tup: tup, conn: conn)
+        let entry = global.put(conn: conn)
         conn.__setGlobal(entry)
-        conns.updateValue(conn, forKey: tup)
+        conns[tup] = conn
     }
 
-    // called on new event loop (before packet redireced)
-    public func migrate(_ conn: Connection) {
-        let oldCT = conn.ct
-        conns[conn.tup] = conn
-        conn.ct = self
-        oldCT.sw.loop.runOnLoop {
-            oldCT.migrateDone(conn)
+    // the isMigrating field should be already set, and locks should be properly retrieved before calling this function
+    public func migrate(anotherConn: Connection, thisNextNode: NodeRef, gconnPeer: GlobalConnEntry?, thisDest: Dest? = nil) -> Connection {
+        let newConn = Connection(ct: self, isBeforeNat: anotherConn.isBeforeNat, tup: anotherConn.tup, nextNode: thisNextNode)
+        newConn.peer = anotherConn.peer
+        newConn.state_ = anotherConn.state_
+        newConn.dest_ = thisDest // should touch the statistics
+        newConn.fastOutput.enabled = anotherConn.fastOutput.enabled
+        let newgconn = global.putNoLock(conn: newConn)
+        newConn.__setGlobal(newgconn)
+
+        conns[newConn.tup] = newConn
+        anotherConn.ct.sw.loop.runOnLoop {
+            anotherConn.destroy(touchConntrack: true, touchPeer: false)
+            if let gconnPeer {
+                gconnPeer.conn.peer = newConn
+                _ = gconnPeer.isMigrating.compareExchange(expected: true, desired: false, ordering: .releasing)
+            }
         }
-    }
-
-    // called on old event loop (after packet redirected)
-    private func migrateDone(_ conn: Connection) {
-        conns.removeValue(forKey: conn.tup)
-        _ = conn.global.isMigrating.compareExchange(expected: true, desired: false, ordering: .relaxed)
+        return newConn
     }
 }
+
+#if SWVS_DEBUG
+public struct WeakConnRef {
+    public weak var conn: Connection?
+
+    public nonisolated(unsafe) static var refs = [WeakConnRef](repeating: WeakConnRef(), count: 1_048_576)
+    private nonisolated(unsafe) static var off = 0
+    public nonisolated(unsafe) static var lock = Lock()
+    public static func record(_ conn: Connection) {
+        lock.lock()
+        let last = off
+        while true {
+            var next = off + 1
+            if next == refs.count {
+                next = 0
+            }
+            if refs[off].conn == nil {
+                refs[off].conn = conn
+                off = next
+                break
+            }
+            off = next
+            if off == last { // not stored
+                break
+            }
+        }
+        lock.unlock()
+    }
+}
+#endif
 
 public class Connection {
     private let destroyed_ = ManagedAtomic<Bool>(false)
     public var destroyed: Bool { destroyed_.load(ordering: .relaxed) }
-    public internal(set) var ct: Conntrack
+    private let ct_: Conntrack?
+    public var ct: Conntrack { ct_! }
     public var peer: Connection?
     public let isBeforeNat: Bool
-    public private(set) var tup: PktTuple
-    public var state: ConnState = .NONE
-    private var timer: Timer?
-    public var nextNode: NodeRef
-    public var dest: Dest?
+    public let tup: PktTuple
+    var state_: ConnState = .NONE
+    public private(set) var timer: Timer?
+    public internal(set) var nextNode: NodeRef
+    var dest_: Dest?
     private var global_: GlobalConnEntry?
     public var global: GlobalConnEntry { global_! }
 
@@ -67,11 +103,50 @@ public class Connection {
 
     public var fastOutput = FastOutput()
 
-    public init(ct: Conntrack, isBeforeNat: Bool, tup: PktTuple, nextNode: NodeRef) {
-        self.ct = ct
+    // record the conn in service or other places
+    public var ___next_: Connection?
+    public var ___prev_: Connection?
+    public var next: Connection { ___next_! }
+    public var prev: Connection { ___prev_! }
+
+    public var state: ConnState {
+        get { state_ }
+        set {
+            if let dest_ {
+                if state_.isActive && !newValue.isActive {
+                    dest_.statistics.activeConns -= 1
+                    dest_.statistics.inactiveConns += 1
+                } else if !state_.isActive && newValue.isActive {
+                    dest_.statistics.inactiveConns -= 1
+                    dest_.statistics.activeConns += 1
+                }
+            }
+            state_ = newValue
+        }
+    }
+
+    public var dest: Dest? {
+        get { dest_ }
+        set {
+            if let newValue {
+                if state_.isActive {
+                    newValue.statistics.activeConns += 1
+                } else {
+                    newValue.statistics.inactiveConns += 1
+                }
+            }
+            dest_ = newValue
+        }
+    }
+
+    public init(ct: Conntrack? = nil, isBeforeNat: Bool, tup: PktTuple, nextNode: NodeRef) {
+        ct_ = ct
         self.isBeforeNat = isBeforeNat
         self.tup = tup
         self.nextNode = nextNode
+#if SWVS_DEBUG
+        WeakConnRef.record(self)
+#endif
     }
 
     // must be called before putting conn into conntrack
@@ -87,6 +162,9 @@ public class Connection {
     }
 
     public func resetTimer(resetPeer: Bool = true) {
+        if destroyed {
+            return
+        }
         if resetPeer, let peer {
             peer.resetTimer(resetPeer: false)
         }
@@ -99,27 +177,38 @@ public class Connection {
         timer!.start()
     }
 
-    private func getTimeoutMillis() -> Int {
-        switch state {
-        case .TCP_ESTABLISHED: return 900_000 // TODO: custom config
-        case .UDP_ESTABLISHED: return 900_000
+    public func getTimeoutMillis() -> Int {
+        switch state_ {
+        case .TCP_ESTABLISHED: return 90000 // TODO: custom config
+        case .UDP_ESTABLISHED: return 120_000
         default: return 5000
         }
     }
 
-    public func destroy(touchConntrack: Bool = true, touchPeer: Bool = true) {
-        if destroyed {
+    public func destroy(touchConntrack: Bool, touchPeer: Bool) {
+        let (exchanged, _) = destroyed_.compareExchange(expected: false, desired: true, ordering: .relaxed)
+        if !exchanged {
             return
         }
-        destroyed_.store(true, ordering: .relaxed)
         global.removeSelf()
 
         let timer = timer
+        let peer = peer
         ct.sw.loop.runOnLoop {
+            self.peer = nil
+
             if let timer {
                 timer.cancel()
             }
             self.timer = nil
+
+            self.global_ = nil
+            if let nx = self.___next_, let pr = self.___prev_ {
+                nx.___prev_ = pr
+                pr.___next_ = nx
+            }
+            self.___next_ = nil
+            self.___prev_ = nil
 
             if touchConntrack {
                 self.ct.conns.removeValue(forKey: self.tup)
@@ -130,25 +219,36 @@ public class Connection {
         }
     }
 
-    class Timer: SwiftEventLoopCommon.Timer {
+    public class Timer: SwiftEventLoopCommon.Timer {
         let parent: Connection
         init(parent: Connection, timeoutMillis: Int) {
             self.parent = parent
             super.init(loop: SelectorEventLoop.current()!, timeoutMillis: timeoutMillis)
         }
 
-        override func cancel() {
-            if !parent.destroyed {
+        override public func cancel() {
+            super.cancel()
+            if parent.destroyed {
+                parent.timer = nil
+            } else {
                 let current = parent.passedPkts.load(ordering: .relaxed)
                 if parent.lastCheckedPassedPkts != current {
                     parent.lastCheckedPassedPkts = current
                     resetTimer()
                     return
                 }
+                parent.destroy(touchConntrack: true, touchPeer: true)
             }
+        }
+    }
 
-            parent.timer = nil
-            parent.destroy()
+    deinit {
+        if let dest_ {
+            if state_.isActive {
+                dest_.statistics.activeConns -= 1
+            } else {
+                dest_.statistics.inactiveConns -= 1
+            }
         }
     }
 }
@@ -165,8 +265,12 @@ public enum ConnState {
     case TCP_CLOSE
     case TCP_CLOSE_WAIT
     case TCP_LAST_ACK
-    case UDP_SINGLE_DIR
+    case UDP_ONE_WAY
     case UDP_ESTABLISHED
+
+    public var isActive: Bool {
+        return self == .TCP_ESTABLISHED || self == .UDP_ESTABLISHED
+    }
 }
 
 public struct FastOutput {
@@ -186,14 +290,35 @@ public class GlobalConntrack {
         conns = [GlobalConntrackHash](repeating: GlobalConntrackHash(), count: size)
     }
 
-    public func put(tup: PktTuple, conn: Connection) -> GlobalConnEntry {
+    public func put(conn: Connection) -> GlobalConnEntry {
+        let tup = conn.tup
         let i = tup.hashValue & modsz
         return conns[i].add(conn)
+    }
+
+    public func putNoLock(conn: Connection) -> GlobalConnEntry {
+        let tup = conn.tup
+        let i = tup.hashValue & modsz
+        return conns[i].add(conn, lock: false)
     }
 
     public func lookup(_ tup: PktTuple) -> (GlobalConnEntry, RWLockRef)? {
         let i = tup.hashValue & modsz
         return conns[i].find(tup)
+    }
+
+    public func lookupWithLock(_ tup: PktTuple, withLock: PktTuple) -> (GlobalConnEntry, RWLockRef?)? {
+        let i = tup.hashValue & modsz
+        let locked = withLock.hashValue & modsz
+        if i == locked {
+            if let res = conns[i].findNoLock(tup) {
+                return (res, nil)
+            } else {
+                return nil
+            }
+        } else {
+            return conns[i].find(tup)
+        }
     }
 
     deinit {
@@ -215,16 +340,23 @@ public struct GlobalConntrackHash {
         head.prev = head
     }
 
-    public mutating func add(_ conn: Connection) -> GlobalConnEntry {
-        let entry = GlobalConnEntry(conn, lock: lock)
+    public mutating func add(_ conn: Connection, lock: Bool = true) -> GlobalConnEntry {
+        let entry = GlobalConnEntry(conn, lock: self.lock)
 
-        lock.wlock()
-        defer { lock.unlock() }
+        if lock {
+            self.lock.wlock()
+        }
 
         let tail = head.prev!
         tail.next = entry
         entry.prev = tail
         entry.next = head
+        head.prev = entry
+
+        if lock {
+            self.lock.unlock()
+        }
+
         return entry
     }
 
@@ -239,6 +371,17 @@ public struct GlobalConntrackHash {
             n = n.next!
         }
         lock.unlock()
+        return nil
+    }
+
+    public func findNoLock(_ tup: PktTuple) -> GlobalConnEntry? {
+        var n = head.next!
+        while n !== head {
+            if n.conn.tup == tup {
+                return n
+            }
+            n = n.next!
+        }
         return nil
     }
 
@@ -294,10 +437,21 @@ public class GlobalConnEntry {
         return false
     }
 
+    public func setMigrateState() -> Bool {
+        let (exchanged, _) = isMigrating.compareExchange(expected: false, desired: true, ordering: .relaxed)
+        return exchanged
+    }
+
+    public func unsetMigrateState() {
+        _ = isMigrating.compareExchange(expected: true, desired: false, ordering: .relaxed)
+    }
+
     public func removeSelf() {
         lock.wlock()
-        defer { lock.unlock() }
         prev!.next = next
         next!.prev = prev
+        next = nil
+        prev = nil
+        lock.unlock()
     }
 }

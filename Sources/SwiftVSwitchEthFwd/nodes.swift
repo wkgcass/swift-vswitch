@@ -63,9 +63,9 @@ class EthernetInput: Node {
         let dstmac = pkb.dstmac!
         let srcmac = pkb.srcmac!
         let bridgeId = bridge.id
-        let ifname = pkb.inputIface!.name
+        let ifid = pkb.inputIface!.id
         sched.sw.foreachWorker { sw in
-            if let bridge = sw.bridges[bridgeId], let inputIface = sw.ifaces[ifname] {
+            if let bridge = sw.bridges[bridgeId], let inputIface = sw.ifaces[ifid] {
                 bridge.macTable.record(mac: srcmac, iface: inputIface)
             }
         }

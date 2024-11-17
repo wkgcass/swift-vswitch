@@ -45,22 +45,24 @@ public enum IfaceLayer {
     case IP
 }
 
-public struct IfaceStatistics {
-    public var rxbytes: UInt64
-    public var rxpkts: UInt64
-    public var rxerrcsum: UInt64
+public struct IfaceStatistics: Encodable, Decodable {
+    public var rxbytes: UInt64 = 0
+    public var rxpkts: UInt64 = 0
+    public var rxerrcsum: UInt64 = 0
 
-    public var txbytes: UInt64
-    public var txpkts: UInt64
-    public var txerr: UInt64
+    public var txbytes: UInt64 = 0
+    public var txpkts: UInt64 = 0
+    public var txerr: UInt64 = 0
 
-    public init() {
-        rxbytes = 0
-        rxpkts = 0
-        rxerrcsum = 0
-        txbytes = 0
-        txpkts = 0
-        txerr = 0
+    public init() {}
+
+    public mutating func inc(_ s: IfaceStatistics) {
+        rxbytes += s.rxbytes
+        rxpkts += s.rxpkts
+        rxerrcsum += s.rxerrcsum
+        txbytes += s.txbytes
+        txpkts += s.txpkts
+        txerr += s.txerr
     }
 }
 

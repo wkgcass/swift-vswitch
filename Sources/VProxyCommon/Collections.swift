@@ -9,7 +9,7 @@ public class ConcurrentQueue<E: AnyObject> {
     }
 
     public func push(_ e: E) {
-        let ptr = Unsafe.convertToNativeAddRef(e)
+        let ptr = Unsafe.convertToNativeIncRef(e)
         if !mpscq_enqueue(&queue, ptr) {
             Logger.warn(.ALERT, "failed to enqueue to ConcurrentQueue")
             Unmanaged<E>.fromOpaque(ptr).release()

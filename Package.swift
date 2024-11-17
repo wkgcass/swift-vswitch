@@ -17,6 +17,7 @@ let package = Package(
         .library(name: "swift-vswitch-netstack", targets: ["SwiftVSwitchNetStack"]),
         .library(name: "swift-vswitch-tuntap", targets: ["SwiftVSwitchTunTap"]),
         .library(name: "swift-vswitch-controlplane", targets: ["SwiftVSwitchControlPlane"]),
+        .library(name: "swift-vswitch-client", targets: ["SwiftVSwitchClient"]),
         .executable(name: "sample-eventloop", targets: ["Sample_EventLoop"]),
         .executable(name: "sample-taptunping", targets: ["Sample_TapTunPing"]),
         .executable(name: "sample-vs", targets: ["Sample_VirtualServer"]),
@@ -57,7 +58,6 @@ let package = Package(
             name: "SwiftVSwitch",
             dependencies: [
                 "SwiftEventLoopCommon", "VProxyChecksum", "SwiftVSwitchCHelper", "poptrie",
-                "SwiftVSwitchVirtualServerBase",
             ]
         ),
         // vswitch tuntap ifaces
@@ -83,12 +83,6 @@ let package = Package(
         ),
         // ipvs
         .target(
-            name: "SwiftVSwitchVirtualServerBase",
-            dependencies: [
-                "VProxyCommon",
-            ]
-        ),
-        .target(
             name: "SwiftVSwitchVirtualServer",
             dependencies: [
                 "SwiftVSwitch",
@@ -96,11 +90,22 @@ let package = Package(
         ),
         // control plane
         .target(
-            name: "SwiftVSwitchControlPlane",
+            name: "SwiftVSwitchControlData",
             dependencies: [
-                "SwiftEventLoopCommon",
                 "SwiftVSwitch",
                 .product(name: "Vapor", package: "vapor"),
+            ]
+        ),
+        .target(
+            name: "SwiftVSwitchControlPlane",
+            dependencies: [
+                "SwiftVSwitchControlData",
+            ]
+        ),
+        .target(
+            name: "SwiftVSwitchClient",
+            dependencies: [
+                "SwiftVSwitchControlData",
             ]
         ),
         // ---
@@ -114,6 +119,8 @@ let package = Package(
                 "SwiftVSwitchEthFwd",
                 "SwiftVSwitchNetStack",
                 "SwiftVSwitchControlPlane",
+                "SwiftVSwitchClient",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
         .executableTarget(
@@ -139,6 +146,7 @@ let package = Package(
                 "SwiftVSwitchTunTap",
                 "SwiftEventLoopPosix",
                 "SwiftVSwitchNetStack",
+                "SwiftVSwitchControlPlane",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),

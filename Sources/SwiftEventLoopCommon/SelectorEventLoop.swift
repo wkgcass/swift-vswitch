@@ -78,14 +78,11 @@ public class SelectorEventLoop {
     }
 
     private func handleTimeEvents() {
-        var toRun: [Runnable] = []
-        while timeQueue.nextTime(currentTimeMillis: Global.currentTimestamp) == 0 {
+        let curr = Global.currentTimestamp
+        while timeQueue.nextTime(currentTimeMillis: curr) <= 0 {
             if let r = timeQueue.poll() {
-                toRun.append(r)
+                tryRunnable(r)
             }
-        }
-        for r in toRun {
-            tryRunnable(r)
         }
     }
 
@@ -303,6 +300,63 @@ public class SelectorEventLoop {
         while !finished.load(ordering: .sequentiallyConsistent) {
             OS.sleep(millis: 1)
         }
+    }
+
+    public func blockUntilResult<T: AnyObject>(_ r: @escaping () -> T?) -> T? {
+        if !needWake() {
+            return r()
+        }
+        let finished = ManagedAtomic<Bool>(false)
+        let res = ManagedAtomic<UnsafeMutableRawPointer?>(nil)
+        nextTick {
+            let data = r()
+            if let data {
+                res.store(Unsafe.convertToNativeIncRef(data), ordering: .sequentiallyConsistent)
+            }
+            finished.store(true, ordering: .sequentiallyConsistent)
+        }
+        while !finished.load(ordering: .sequentiallyConsistent) {
+            OS.sleep(millis: 1)
+        }
+        let ptr = res.load(ordering: .sequentiallyConsistent)
+        guard let ptr else {
+            return nil
+        }
+        return Unsafe.convertFromNativeDecRef(ptr)
+    }
+
+    public func blockUntilResultWithErr<T: AnyObject>(_ r: @escaping () throws -> T?) throws -> T? {
+        if !needWake() {
+            return try r()
+        }
+        let finished = ManagedAtomic<Bool>(false)
+        let res = ManagedAtomic<UnsafeMutableRawPointer?>(nil)
+        let err = ManagedAtomic<UnsafeMutableRawPointer?>(nil)
+        nextTick {
+            do {
+                let data = try r()
+                if let data {
+                    res.store(Unsafe.convertToNativeIncRef(data), ordering: .relaxed)
+                }
+            } catch {
+                let box: Box<Error> = Box(error)
+                err.store(Unsafe.convertToNativeIncRef(box), ordering: .relaxed)
+            }
+            finished.store(true, ordering: .sequentiallyConsistent)
+        }
+        while !finished.load(ordering: .sequentiallyConsistent) {
+            OS.sleep(millis: 1)
+        }
+        let errPtr = err.load(ordering: .relaxed)
+        if let errPtr {
+            let box: Box<Error> = Unsafe.convertFromNativeDecRef(errPtr)
+            throw box.pointee
+        }
+        let ptr = res.load(ordering: .relaxed)
+        guard let ptr else {
+            return nil
+        }
+        return Unsafe.convertFromNativeDecRef(ptr)
     }
 
     public func forEachLoop(_ e: ForEachPollEvent) {

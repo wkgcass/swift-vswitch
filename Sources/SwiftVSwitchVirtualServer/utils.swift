@@ -1,5 +1,4 @@
 import SwiftVSwitch
-import SwiftVSwitchVirtualServerBase
 import VProxyCommon
 
 public extension Service {
@@ -32,6 +31,7 @@ public extension IPPool {
             for _ in 0 ..< 20 {
                 var port = UInt16.random(in: 1 ... 65535)
                 port = port & portMask
+                port = port | portFill
 
                 assert(Logger.lowLevelDebug("trying ip=\(ip) port=\(port)"))
 

@@ -30,9 +30,14 @@ public class Utils {
         n |= n >> 16
         return n + 1
     }
+
+    @inlinable @inline(__always)
+    public static func isPowerOf2(_ n: Int) -> Bool {
+        return (n & (n - 1)) == 0
+    }
 }
 
-public extension Array<UInt8> {
+public extension [UInt8] {
     @inlinable @inline(__always)
     static func fromHex(_ hexString: String) -> [UInt8]? {
         let utf8 = hexString.utf8CString
@@ -47,5 +52,16 @@ public extension Array<UInt8> {
             result[i] = (Utils.hexCharToByte(high) << 4) | Utils.hexCharToByte(low)
         }
         return result
+    }
+}
+
+public class Box<T>: CustomStringConvertible {
+    public var pointee: T
+    public init(_ pointee: T) {
+        self.pointee = pointee
+    }
+
+    public var description: String {
+        return String(describing: pointee)
     }
 }

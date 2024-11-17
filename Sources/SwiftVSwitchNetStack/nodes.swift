@@ -128,9 +128,10 @@ class ArpInput: Node {
             let srcmac = pkb.srcmac!
             let ip = pkb.ipSrc!
             let netstackId = pkb.netstack!.id
+            let ifId = pkb.inputIface!.id
             sched.sw.foreachWorker { sw in
-                if let netstack = sw.netstacks[netstackId] {
-                    netstack.arpTable.record(mac: srcmac, ip: ip)
+                if let netstack = sw.netstacks[netstackId], let iface = sw.ifaces[ifId] {
+                    netstack.arpTable.record(mac: srcmac, ip: ip, dev: iface)
                 }
             }
         }
@@ -162,7 +163,7 @@ class ArpReqInput: Node {
         let ether: UnsafeMutablePointer<swvs_ethhdr> = Unsafe.ptr2mutUnsafe(pkb.raw)
         let arp: UnsafeMutablePointer<swvs_arp> = Unsafe.ptr2mutUnsafe(pkb.ip!)
         let target = pkb.ipDst as! IPv4
-        let ifaces = pkb.netstack!.ipv4[target]
+        let ifaces = pkb.netstack!.ips.ipv4[target]
         guard let ifaces else {
             assert(Logger.lowLevelDebug("ip \(target) not found"))
             return sched.schedule(pkb, to: drop)
@@ -219,12 +220,12 @@ class IPRoute: Node {
         }
 
         if let v4 = pkb.ipDst as? IPv4 {
-            if pkb.netstack!.ipv4[v4] != nil {
+            if pkb.netstack!.ips.ipv4[v4] != nil {
                 return sched.schedule(pkb, to: ip4Input)
             }
         } else {
             let v6 = pkb.ipDst as! IPv6
-            if v6.isMulticast() || pkb.netstack!.ipv6[v6] != nil {
+            if v6.isMulticast() || pkb.netstack!.ips.ipv6[v6] != nil {
                 return sched.schedule(pkb, to: ip6Input)
             }
         }
@@ -429,7 +430,7 @@ class NdpNsInput: Node {
             return sched.schedule(pkb, to: drop)
         }
         let target = IPv6(raw: &icmp.pointee.target)
-        let ifaces = pkb.netstack!.ipv6[target]
+        let ifaces = pkb.netstack!.ips.ipv6[target]
         guard let ifaces else {
             assert(Logger.lowLevelDebug("target ip \(target) is not found"))
             return sched.schedule(pkb, to: drop)
@@ -480,9 +481,10 @@ class NdpNsInput: Node {
         assert(Logger.lowLevelDebug("begin to handle the icmpv6 ndp-ns ..."))
         let ipsrc = pkb.ipSrc!
         let netstackId = pkb.netstack!.id
+        let ifId = pkb.inputIface!.id
         sched.sw.foreachWorker { sw in
-            if let netstack = sw.netstacks[netstackId] {
-                netstack.arpTable.record(mac: srcmacInOpt, ip: ipsrc)
+            if let netstack = sw.netstacks[netstackId], let iface = sw.ifaces[ifId] {
+                netstack.arpTable.record(mac: srcmacInOpt, ip: ipsrc, dev: iface)
             }
         }
 
@@ -580,10 +582,11 @@ class NdpNaInput: Node {
         assert(Logger.lowLevelDebug("begin to handle the icmpv6 ndp-na ..."))
         let netstackId = pkb.netstack!.id
         let ipsrc = pkb.ipSrc!
+        let ifId = pkb.inputIface!.id
         sched.sw.foreachWorker { sw in
-            if let netstack = sw.netstacks[netstackId] {
-                netstack.arpTable.record(mac: srcmacInOpt, ip: target)
-                netstack.arpTable.record(mac: srcmacInOpt, ip: ipsrc)
+            if let netstack = sw.netstacks[netstackId], let iface = sw.ifaces[ifId] {
+                netstack.arpTable.record(mac: srcmacInOpt, ip: target, dev: iface)
+                netstack.arpTable.record(mac: srcmacInOpt, ip: ipsrc, dev: iface)
             }
         }
 
@@ -687,7 +690,7 @@ class IPRouteLinkOutput: Node {
             lookupMacByIp = r.gateway!
         }
 
-        let mac = pkb.netstack!.arpTable.lookup(ip: lookupMacByIp)
+        let mac = pkb.netstack!.arpTable.lookup(ip: lookupMacByIp, dev: r.dev)
         if let mac {
             assert(Logger.lowLevelDebug("mac for \(lookupMacByIp) already exists: \(mac)"))
 
@@ -798,6 +801,8 @@ class ConnLookup: Node {
                 return sched.schedule(pkb, to: connCreate)
             }
             if !migrate(pkb, sched, gconn) {
+                gconn.unsetMigrateState() // ensure it's unset
+
                 assert(Logger.lowLevelDebug("need to redirect the packet to another worker"))
                 pkb.conn = gconn.conn
                 gconn.conn.ct.sw.reenqueue(pkb)
@@ -806,26 +811,61 @@ class ConnLookup: Node {
             }
             lock.unlock()
             // fallthrough
+        } else {
+            assert(Logger.lowLevelDebug("conn exists for \(tup)"))
+            pkb.conn = conn
         }
-        assert(Logger.lowLevelDebug("conn exists for \(tup)"))
-        pkb.conn = conn
         sched.schedule(pkb, to: conn!.nextNode)
     }
 
     @inline(__always)
     private func migrate(_ pkb: PacketBuffer, _ sched: Scheduler, _ gconn: GlobalConnEntry) -> Bool {
         assert(Logger.lowLevelDebug("check whether we can migrate to another thread"))
-        if gconn.needToMigrate(swIndex: sched.sw.index) {
-            let node = sched.mgr.getNodeBy(name: gconn.conn.nextNode.name)
-            if let node {
-                var ref = NodeRef(node.name)
-                ref.set(node)
-                gconn.conn.nextNode = ref
-                pkb.netstack!.conntrack.migrate(gconn.conn)
-                return true
+        if !gconn.needToMigrate(swIndex: sched.sw.index) {
+            assert(Logger.lowLevelDebug("no need to migurate for now"))
+            return false
+        }
+        let node = sched.mgr.getNodeBy(id: gconn.conn.nextNode.id)
+        guard let node else {
+            assert(Logger.lowLevelDebug("node \(gconn.conn.nextNode.name) not found"))
+            return false
+        }
+        let thisDest: Dest?
+        if let anotherDest = gconn.conn.dest {
+            let anotherSvc = anotherDest.service
+            let svcTup = GetServiceTuple(proto: anotherSvc.proto, vip: anotherSvc.vip, port: anotherSvc.port)
+            let thisSvc = pkb.netstack!.ipvs.services[svcTup]
+            guard let thisSvc else {
+                assert(Logger.lowLevelDebug("unable to find svc \(svcTup)"))
+                return false
+            }
+            thisDest = thisSvc.lookupDest(ip: anotherDest.ip, port: anotherDest.port)
+            guard let _ = thisDest else {
+                assert(Logger.lowLevelDebug("unable to find dest \(anotherDest.ip) \(anotherDest.port) in svc \(svcTup)"))
+                return false
+            }
+        } else { thisDest = nil }
+        var gconnPeer: (GlobalConnEntry, RWLockRef?)? = nil
+        if let peer = gconn.conn.peer {
+            gconnPeer = pkb.netstack!.conntrack.global.lookupWithLock(peer.tup, withLock: gconn.conn.tup)
+        }
+        if let gconnPeer {
+            let ok = gconnPeer.0.setMigrateState()
+            if let lock = gconnPeer.1 {
+                lock.unlock()
+            }
+            if !ok {
+                assert(Logger.lowLevelDebug("peer is in migrating state"))
+                return false
             }
         }
-        return false
+
+        var ref = NodeRef(node.name)
+        ref.set(node)
+
+        let newConn = pkb.netstack!.conntrack.migrate(anotherConn: gconn.conn, thisNextNode: ref, gconnPeer: gconnPeer?.0, thisDest: thisDest)
+        pkb.conn = newConn
+        return true
     }
 }
 

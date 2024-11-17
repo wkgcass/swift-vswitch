@@ -2,12 +2,19 @@ import ArgumentParser
 import SwiftEventLoopCommon
 import SwiftEventLoopPosix
 import SwiftVSwitch
+import SwiftVSwitchControlPlane
 import SwiftVSwitchNetStack
 import SwiftVSwitchTunTap
-import SwiftVSwitchVirtualServerBase
 import VProxyCommon
 
-struct VirtualServerSample: ParsableCommand {
+@main
+struct Main {
+    static func main() async {
+        await VirtualServerSample.main()
+    }
+}
+
+struct VirtualServerSample: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "A sample virtual server.")
 
@@ -60,7 +67,7 @@ struct VirtualServerSample: ParsableCommand {
         }
     }
 
-    func run() throws {
+    func run() async throws {
         PosixFDs.setup()
 
         let isTun = type == "tun"
@@ -103,6 +110,7 @@ struct VirtualServerSample: ParsableCommand {
         sw.start()
 
         sw.ensureNetstack(id: 1)
+        var portFill: UInt16 = 1
         sw.configure { _, sw in
             let netstack = sw.netstacks[1]!
             for vipmask in vips {
@@ -110,7 +118,10 @@ struct VirtualServerSample: ParsableCommand {
                     let svc = Service(proto: proto,
                                       vip: vipmask!.ip,
                                       port: port,
-                                      sched: WeightedRoundRobinDestScheduler())
+                                      sched: WeightedRoundRobinDestScheduler(),
+                                      portMask: 0xff80,
+                                      portFill: portFill)
+                    portFill += 1
                     _ = netstack.ipvs.addService(svc)
                     for destIpPortWeight in dests {
                         let destIpPortWeight = destIpPortWeight!
@@ -131,8 +142,7 @@ struct VirtualServerSample: ParsableCommand {
             try sw.register(tun, netstack: 1)
             for vipmask in vips {
                 sw.configure { _, sw in
-                    sw.addAddress(vipmask!.ip, dev: tun.name)
-                    sw.addRoute(vipmask!.network, dev: tun.name, src: vipmask!.ip)
+                    sw.addAddress(vipmask, dev: tun.name)
                 }
             }
         } else {
@@ -140,15 +150,13 @@ struct VirtualServerSample: ParsableCommand {
             try sw.register(tap, netstack: 1)
             for vipmask in vips {
                 sw.configure { _, sw in
-                    sw.addAddress(vipmask!.ip, dev: tap.name)
-                    sw.addRoute(vipmask!.network, dev: tap.name, src: vipmask!.ip)
+                    sw.addAddress(vipmask, dev: tap.name)
                 }
             }
         }
 
         Logger.alert("sample-vs started")
-        sw.joinMasterThread()
+        let controlPlane = ControlPlane(sw)
+        try await controlPlane.launch()
     }
 }
-
-VirtualServerSample.main()

@@ -1,8 +1,14 @@
+import Atomics
 import SwiftVSwitchCHelper
 import VProxyChecksum
 import VProxyCommon
 
+private let nodeIdCounter = ManagedAtomic<UInt32>(0)
+private nonisolated(unsafe) var nodeNameIdLock = Lock()
+private nonisolated(unsafe) var nodeNameToIdMap = [String: UInt32]()
+
 open class Node: CustomStringConvertible, Equatable, Hashable {
+    public let id: UInt32
     public let name: String
     public var packets: [UnownedPacketBuffer] = Arrays.newArray(capacity: 2048)
     public var offset = 0
@@ -10,6 +16,15 @@ open class Node: CustomStringConvertible, Equatable, Hashable {
     public var stolen = NodeRef("stolen")
 
     public init(name: String) {
+        nodeNameIdLock.lock()
+        defer { nodeNameIdLock.unlock() }
+
+        if let id = nodeNameToIdMap[name] {
+            self.id = id
+        } else {
+            id = nodeIdCounter.wrappingIncrementThenLoad(ordering: .relaxed)
+            nodeNameToIdMap[name] = id
+        }
         self.name = name
     }
 
@@ -137,6 +152,8 @@ public struct NodeRef {
         return node_!
     }
 
+    public var id: UInt32 { node.id }
+
     public init(_ name: String) {
         self.name = name
     }
@@ -147,7 +164,8 @@ public struct NodeRef {
 }
 
 open class NodeManager {
-    var storage = [String: Node]()
+    var storage = [UInt32: Node]()
+    private var nameStorage = [String: Node]()
     var drop = DropNode()
     var stolen = StolenNode()
     var devOutput = DevOutput()
@@ -163,11 +181,12 @@ open class NodeManager {
     }
 
     public func addNode(_ node: Node) {
-        storage[node.name] = node
+        storage[node.id] = node
+        nameStorage[node.name] = node
     }
 
     public func initRef(_ ref: inout NodeRef) {
-        let node = storage[ref.name]
+        let node = nameStorage[ref.name]
         if node == nil {
             Logger.error(.IMPROPER_USE, "unable to find node with name \(ref.name), exiting ...")
         }
@@ -183,8 +202,8 @@ open class NodeManager {
         }
     }
 
-    public func getNodeBy(name: String) -> Node? {
-        return storage[name]
+    public func getNodeBy(id: UInt32) -> Node? {
+        return storage[id]
     }
 }
 

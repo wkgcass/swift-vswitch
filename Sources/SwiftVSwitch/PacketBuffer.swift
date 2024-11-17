@@ -48,7 +48,7 @@ public class PacketBuffer: CustomStringConvertible {
     private var appLen_: UInt16 = 0
     private var tup_: PktTuple? = nil
 
-    public var conn: Connection? = nil
+    public unowned var conn: Connection? = nil
 
     private var ether_: UnsafePointer<UInt8>?
     private var ip_: UnsafePointer<UInt8>?
@@ -1049,11 +1049,11 @@ public class PacketBuffer: CustomStringConvertible {
 public class PacketBufferForRedirecting {
     public let pkb: PacketBuffer
     public var netstack: UInt32
-    public var inputIface: String
+    public var inputIface: UInt32
     init(_ pkb: PacketBuffer) {
         self.pkb = pkb
         netstack = pkb.netstack!.id
-        inputIface = pkb.inputIface!.name
+        inputIface = pkb.inputIface!.id
     }
 }
 

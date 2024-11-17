@@ -1,6 +1,5 @@
 import SwiftVSwitch
 import SwiftVSwitchCHelper
-import SwiftVSwitchVirtualServerBase
 import VProxyCommon
 
 public func addIPVSNodes(_ mgr: NodeManager) {
@@ -46,6 +45,7 @@ class IPVSConnCreate: Node {
         if dest.fwd == FwdMethod.FNAT {
             let afterNat = svc.findFreeLocalIPPort(dest, ct: conntrack)
             guard let afterNat else {
+                svc.statistics.addressBusyCount += 1
                 return sched.schedule(pkb, to: drop)
             }
 
@@ -62,9 +62,12 @@ class IPVSConnCreate: Node {
             clientConn.peer = serverConn
             serverConn.peer = clientConn
 
-            conntrack.put(clientConn.tup, clientConn)
-            conntrack.put(serverConn.tup, serverConn)
+            conntrack.put(clientConn)
+            conntrack.put(serverConn)
             clientConn.resetTimer()
+
+            svc.recordConn(clientConn)
+            svc.recordConn(serverConn)
 
             pkb.conn = clientConn
             return sched.schedule(pkb, to: natInput)

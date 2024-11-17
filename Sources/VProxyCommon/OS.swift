@@ -10,10 +10,10 @@ let globalExit = exit
 public class OS {
     private init() {}
 
-    public static func currentTimeMillis() -> UInt64 {
+    public static func currentTimeMillis() -> Int64 {
         var tv = timeval()
         gettimeofday(&tv, nil)
-        return UInt64(tv.tv_sec) * 1000 + UInt64(tv.tv_usec / 1000)
+        return Int64(tv.tv_sec) * 1000 + Int64(tv.tv_usec / 1000)
     }
 
     public static func sleep(millis: Int) {

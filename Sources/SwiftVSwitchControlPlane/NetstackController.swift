@@ -1,9 +1,7 @@
 import SwiftVSwitch
+import SwiftVSwitchControlData
 import Vapor
-
-struct NetstackRef: Content {
-    var id: UInt32
-}
+import VProxyCommon
 
 struct NetstackController: RouteCollection, @unchecked Sendable {
     private let sw: VSwitch
@@ -17,6 +15,37 @@ struct NetstackController: RouteCollection, @unchecked Sendable {
     }
 
     private func listNetstacks(req _: Request) async throws -> [NetstackRef] {
-        return [NetstackRef(id: 123)]
+        let box = sw.query { sw in
+            let netstacks = Box([NetstackRef]())
+            for ns in sw.netstacks.values {
+                netstacks.pointee.append(NetstackRef(
+                    name: "ns\(ns.id)",
+                    id: ns.id
+                ))
+            }
+            return netstacks
+        }!
+        return box.pointee
     }
+}
+
+func formatConnection(_ conn: Connection, withPeer: Bool = true) -> ConnRef {
+    let ref = ConnRef(
+        cid: conn.ct.sw.index,
+        proto: conn.tup.proto,
+        src: conn.tup.srcIp.description,
+        srcPort: conn.tup.srcPort,
+        dst: conn.tup.dstIp.description,
+        dstPort: conn.tup.dstPort,
+        state: "\(conn.state)",
+        timeoutMillis: conn.getTimeoutMillis(),
+        ttl: conn.timer?.ttl ?? -1,
+        isBeforeNat: conn.isBeforeNat,
+        address: Int(bitPattern: Unmanaged<Connection>.passUnretained(conn).toOpaque()),
+        peer: nil
+    )
+    if withPeer, let peer = conn.peer {
+        ref.peer = formatConnection(peer, withPeer: false)
+    }
+    return ref
 }

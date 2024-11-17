@@ -82,7 +82,7 @@ open class Timer {
         }
     }
 
-    var ttl: Int64 {
+    public var ttl: Int64 {
         if lastStart == -1 {
             return -1
         }

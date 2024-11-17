@@ -5,8 +5,8 @@ public func udpStateTransfer(clientConn: Connection, serverConn: Connection, isF
         return
     }
     if clientConn.state == .NONE {
-        clientConn.state = .UDP_SINGLE_DIR
-        serverConn.state = .UDP_SINGLE_DIR
+        clientConn.state = .UDP_ONE_WAY
+        serverConn.state = .UDP_ONE_WAY
     }
     if !isFromClient {
         clientConn.state = .UDP_ESTABLISHED
