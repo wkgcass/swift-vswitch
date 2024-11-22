@@ -16,6 +16,14 @@ extension Client {
             throw IllegalArgumentException("TODO")
         } else if first == "del" {
             throw IllegalArgumentException("TODO")
+        } else if first == "help" {
+            print("""
+                [ip netns exec] ns<n> ip route show
+                [ip netns exec] ns<n> ip route add <cidr> dev <dev>
+                [ip netns exec] ns<n> ip route add <cidr> via <ip> dev <dev>
+                [ip netns exec] ns<n> ip route del <cidr>
+            """)
+            return
         } else {
             throw IllegalArgumentException("unknown ip route command: \(first)")
         }

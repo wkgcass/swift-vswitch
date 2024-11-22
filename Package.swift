@@ -28,6 +28,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", revision: "1.5.0"),
         .package(url: "https://github.com/apple/swift-atomics", revision: "1.2.0"),
         .package(url: "https://github.com/vapor/vapor", revision: "4.106.3"),
+        .package(url: "https://github.com/vproxy-tools/SwiftLinkedListAndHash", revision: "c72785ae7f785963584852f731546182620839b5"),
     ],
     targets: [
         // common utilities
@@ -36,6 +37,7 @@ let package = Package(
             dependencies: [
                 "VProxyCommonCHelper",
                 "WaitfreeMpscQueue",
+                "SwiftLinkedListAndHash",
                 .product(name: "Collections", package: "swift-collections"),
             ]
         ),

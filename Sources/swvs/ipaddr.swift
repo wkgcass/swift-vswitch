@@ -18,6 +18,12 @@ extension Client {
         } else if first == "del" {
             // TODO:
             throw IllegalArgumentException("TODO")
+        } else if first == "help" {
+            print("""
+                [ip netns exec] ns<n> ip addr show
+                [ip netns exec] ns<n> ip addr add <ipmask> dev <dev>
+            """)
+            return
         } else {
             throw IllegalArgumentException("unknown ip addr command: \(first)")
         }

@@ -312,7 +312,7 @@ public class PacketBuffer: CustomStringConvertible {
         }
     }
 
-    public init(_ other: PacketBuffer) {
+    public init(_ other: PacketBuffer, tryToUseThreadLocalBufferPool: Bool = true) {
         useOwned = true
 
         bridge = other.bridge
@@ -322,7 +322,7 @@ public class PacketBuffer: CustomStringConvertible {
         outputIface = other.outputIface
         outputRouteRule = other.outputRouteRule
 
-        if other.headroom + other.pktlen + other.tailroom == ThreadMemPoolArraySize {
+        if tryToUseThreadLocalBufferPool && other.headroom + other.pktlen + other.tailroom == ThreadMemPoolArraySize {
             buf = RawBufRef()
         } else {
             buf = ArrayBufRef(Arrays.newArray(capacity: other.headroom + other.pktlen + other.tailroom,
@@ -1050,10 +1050,16 @@ public class PacketBufferForRedirecting {
     public let pkb: PacketBuffer
     public var netstack: UInt32
     public var inputIface: UInt32
+#if REDIRECT_TIME_COST_DEBUG
+    public var enqueueTs: Int64
+#endif
     init(_ pkb: PacketBuffer) {
         self.pkb = pkb
         netstack = pkb.netstack!.id
         inputIface = pkb.inputIface!.id
+#if REDIRECT_TIME_COST_DEBUG
+        enqueueTs = OS.currentTimeUSecs()
+#endif
     }
 }
 

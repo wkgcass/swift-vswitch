@@ -7,7 +7,13 @@ import Glibc
 public struct Lock {
     private var lock_ = pthread_mutex_t()
 
-    public init() {
+    public init(lockInit: Bool = true) {
+        if lockInit {
+            self.lockInit()
+        }
+    }
+
+    public mutating func lockInit() {
         pthread_mutex_init(&lock_, nil)
     }
 
@@ -23,7 +29,13 @@ public struct Lock {
 public struct RWLock {
     private var lock_ = pthread_rwlock_t()
 
-    public init() {
+    public init(lockInit: Bool = true) {
+        if lockInit {
+            self.lockInit()
+        }
+    }
+
+    public mutating func lockInit() {
         pthread_rwlock_init(&lock_, nil)
     }
 

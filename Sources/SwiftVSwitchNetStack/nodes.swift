@@ -796,13 +796,11 @@ class ConnLookup: Node {
         let conn = pkb.netstack!.conntrack.lookup(tup)
         if conn == nil {
             // try to find conn in global conntrack
-            guard let (gconn, lock) = pkb.netstack!.conntrack.global.lookup(tup) else {
+            guard let (index, gconn, lock) = pkb.netstack!.conntrack.global.lookup(tup) else {
                 assert(Logger.lowLevelDebug("conn not found for \(tup)"))
                 return sched.schedule(pkb, to: connCreate)
             }
-            if !migrate(pkb, sched, gconn) {
-                gconn.unsetMigrateState() // ensure it's unset
-
+            if !migrate(pkb, sched, gconn, index) {
                 assert(Logger.lowLevelDebug("need to redirect the packet to another worker"))
                 pkb.conn = gconn.conn
                 gconn.conn.ct.sw.reenqueue(pkb)
@@ -819,7 +817,7 @@ class ConnLookup: Node {
     }
 
     @inline(__always)
-    private func migrate(_ pkb: PacketBuffer, _ sched: Scheduler, _ gconn: GlobalConnEntry) -> Bool {
+    private func migrate(_ pkb: PacketBuffer, _ sched: Scheduler, _ gconn: GlobalConnEntry, _ lockedIndex: Int) -> Bool {
         assert(Logger.lowLevelDebug("check whether we can migrate to another thread"))
         if !gconn.needToMigrate(swIndex: sched.sw.index) {
             assert(Logger.lowLevelDebug("no need to migurate for now"))
@@ -845,25 +843,20 @@ class ConnLookup: Node {
                 return false
             }
         } else { thisDest = nil }
-        var gconnPeer: (GlobalConnEntry, RWLockRef?)? = nil
+        var gconnPeer: (Int, GlobalConnEntry, RWLockRef?)? = nil
         if let peer = gconn.conn.peer {
-            gconnPeer = pkb.netstack!.conntrack.global.lookupWithLock(peer.tup, withLock: gconn.conn.tup)
+            gconnPeer = pkb.netstack!.conntrack.global.lookup(peer.tup, withLockedIndex: lockedIndex)
         }
         if let gconnPeer {
-            let ok = gconnPeer.0.setMigrateState()
-            if let lock = gconnPeer.1 {
+            if let lock = gconnPeer.2 {
                 lock.unlock()
-            }
-            if !ok {
-                assert(Logger.lowLevelDebug("peer is in migrating state"))
-                return false
             }
         }
 
         var ref = NodeRef(node.name)
         ref.set(node)
 
-        let newConn = pkb.netstack!.conntrack.migrate(anotherConn: gconn.conn, thisNextNode: ref, gconnPeer: gconnPeer?.0, thisDest: thisDest)
+        let newConn = pkb.netstack!.conntrack.migrate(anotherConn: gconn.conn, thisNextNode: ref, peer: gconnPeer?.1.conn, thisDest: thisDest)
         pkb.conn = newConn
         return true
     }

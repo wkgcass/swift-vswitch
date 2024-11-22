@@ -21,14 +21,19 @@ public class Utils {
 
     @inlinable @inline(__always)
     public static func findNextPowerOf2(_ n: Int) -> Int {
+        if n <= 0 {
+            return 1
+        }
+        if (n & (n - 1)) != 0 {
+            return n
+        }
         var n = n
-        n -= 1
-        n |= n >> 1
-        n |= n >> 2
-        n |= n >> 4
-        n |= n >> 8
-        n |= n >> 16
-        return n + 1
+        var count = 0
+        while n != 0 {
+            n >>= 1
+            count += 1
+        }
+        return 1 << count
     }
 
     @inlinable @inline(__always)

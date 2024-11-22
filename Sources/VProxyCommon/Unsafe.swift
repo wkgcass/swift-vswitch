@@ -8,6 +8,11 @@ public class Unsafe {
     private init() {}
 
     @inlinable @inline(__always)
+    public static func addressOf<E: ~Copyable>(_ v: inout E) -> UnsafeRawPointer {
+        return withUnsafePointer(to: &v) { p in ptr2raw(p) }
+    }
+
+    @inlinable @inline(__always)
     public static func raw2ptr<T>(_ raw: UnsafeRawPointer) -> UnsafePointer<T> {
         return raw.assumingMemoryBound(to: T.self)
     }
@@ -40,7 +45,7 @@ public class Unsafe {
     }
 
     @inlinable @inline(__always)
-    public static func ptr2raw<T>(_ p: UnsafePointer<T>) -> UnsafeRawPointer {
+    public static func ptr2raw<T: ~Copyable>(_ p: UnsafePointer<T>) -> UnsafeRawPointer {
         return UnsafeRawPointer(p)
     }
 
@@ -107,7 +112,7 @@ public class Unsafe {
     }
 
     @inlinable @inline(__always)
-    public static func converToNativeKeepRef<T: AnyObject>(_ value: T) -> UnsafeMutableRawPointer {
+    public static func convertToNativeKeepRef<T: AnyObject>(_ value: T) -> UnsafeMutableRawPointer {
         return Unmanaged<T>.passUnretained(value).toOpaque()
     }
 

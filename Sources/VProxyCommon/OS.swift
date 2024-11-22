@@ -16,6 +16,12 @@ public class OS {
         return Int64(tv.tv_sec) * 1000 + Int64(tv.tv_usec / 1000)
     }
 
+    public static func currentTimeUSecs() -> Int64 {
+        var tv = timeval()
+        gettimeofday(&tv, nil)
+        return Int64(tv.tv_sec) * 1000 * 1000 + Int64(tv.tv_usec)
+    }
+
     public static func sleep(millis: Int) {
         usleep(useconds_t(millis * 1000))
     }

@@ -1,5 +1,5 @@
 {
-  "originHash" : "a322fcbfeb056d443ff48894ed52f97ac081fadbf8fd0dfb90d194d4a4e0517e",
+  "originHash" : "1eb2f7b25569b6c0db970388488d907fa7fd2d3db5594a4f62a57d42b6166540",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -188,6 +188,14 @@
       "state" : {
         "revision" : "c8a44d836fe7913603e246acab7c528c2e780168",
         "version" : "1.4.0"
+      }
+    },
+    {
+      "identity" : "swiftlinkedlistandhash",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/vproxy-tools/SwiftLinkedListAndHash",
+      "state" : {
+        "revision" : "c72785ae7f785963584852f731546182620839b5"
       }
     },
     {

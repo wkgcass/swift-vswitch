@@ -20,6 +20,8 @@ struct Client: @unchecked Sendable {
             try await runConntrackInNetns(0, argv.dropFirst())
         } else if first.hasPrefix("ns"), first.count > 2 {
             try await runNetnsExec(argv)
+        } else if first == "debug" {
+            try await runDebug(argv.dropFirst())
         } else {
             throw IllegalArgumentException("unknown command \(first)")
         }
@@ -30,6 +32,14 @@ struct Client: @unchecked Sendable {
             throw IllegalArgumentException("no ip action provided")
         }
 
+        if first == "help" {
+            print("""
+                ip netns add ns<n>
+                ip netns del ns<n>
+                ip netns show
+            """)
+            return
+        }
         if first != "netns" {
             throw IllegalArgumentException("ip command should begin with `ip netns` to select the namespace (netstack)")
         }

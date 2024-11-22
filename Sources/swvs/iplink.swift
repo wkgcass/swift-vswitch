@@ -12,6 +12,11 @@ extension Client {
                 return try await runIPLinkShowAll(id, argv.dropFirst())
             }
             try await runIPLinkShowOne(id, argv.dropFirst())
+        } else if first == "help" {
+            print("""
+                [ip netns exec] ns<n> ip link show
+            """)
+            return
         } else {
             throw IllegalArgumentException("unknown ip link command: \(first)")
         }

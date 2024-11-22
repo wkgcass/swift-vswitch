@@ -1,5 +1,6 @@
 import Atomics
 import SwiftEventLoopCommon
+import SwiftLinkedListAndHash
 import VProxyCommon
 
 public class Conntrack {
@@ -26,34 +27,36 @@ public class Conntrack {
             oldConn.destroy(touchConntrack: false, touchPeer: false)
         }
 
-        let entry = global.put(conn: conn)
+        let entry = global.record(conn: conn)
         conn.__setGlobal(entry)
         conns[tup] = conn
     }
 
     // the isMigrating field should be already set, and locks should be properly retrieved before calling this function
-    public func migrate(anotherConn: Connection, thisNextNode: NodeRef, gconnPeer: GlobalConnEntry?, thisDest: Dest? = nil) -> Connection {
+    public func migrate(anotherConn: Connection, thisNextNode: NodeRef, peer: Connection?, thisDest: Dest? = nil) -> Connection {
         let newConn = Connection(ct: self, isBeforeNat: anotherConn.isBeforeNat, tup: anotherConn.tup, nextNode: thisNextNode)
         newConn.peer = anotherConn.peer
         newConn.state_ = anotherConn.state_
         newConn.dest_ = thisDest // should touch the statistics
         newConn.fastOutput.enabled = anotherConn.fastOutput.enabled
-        let newgconn = global.putNoLock(conn: newConn)
+        let newgconn = global.recordNoLock(conn: newConn)
         newConn.__setGlobal(newgconn)
 
         conns[newConn.tup] = newConn
         anotherConn.ct.sw.loop.runOnLoop {
             anotherConn.destroy(touchConntrack: true, touchPeer: false)
-            if let gconnPeer {
-                gconnPeer.conn.peer = newConn
-                _ = gconnPeer.isMigrating.compareExchange(expected: true, desired: false, ordering: .releasing)
+            if let peer {
+                peer.peer = newConn
+                if !newConn.isBeforeNat { // always use isBeforeNat conn's isMigrating field
+                    _ = peer.isMigrating.compareExchange(expected: true, desired: false, ordering: .relaxed)
+                }
             }
         }
         return newConn
     }
 }
 
-#if SWVS_DEBUG
+#if GLOBAL_WEAK_CONN_DEBUG
 public struct WeakConnRef {
     public weak var conn: Connection?
 
@@ -84,10 +87,12 @@ public struct WeakConnRef {
 #endif
 
 public class Connection {
+    // record the conn in service
+    var node = ConnectionServiceListNode()
+
     private let destroyed_ = ManagedAtomic<Bool>(false)
     public var destroyed: Bool { destroyed_.load(ordering: .relaxed) }
-    private let ct_: Conntrack?
-    public var ct: Conntrack { ct_! }
+    public let ct: Conntrack
     public var peer: Connection?
     public let isBeforeNat: Bool
     public let tup: PktTuple
@@ -100,14 +105,13 @@ public class Connection {
 
     private let passedPkts = ManagedAtomic<Int64>(0)
     private var lastCheckedPassedPkts: Int64 = 0
+    private let isMigrating_: ManagedAtomic<Bool>?
+    var isMigrating: ManagedAtomic<Bool> {
+        if isBeforeNat { isMigrating_! }
+        else { peer!.isMigrating_! }
+    }
 
     public var fastOutput = FastOutput()
-
-    // record the conn in service or other places
-    public var ___next_: Connection?
-    public var ___prev_: Connection?
-    public var next: Connection { ___next_! }
-    public var prev: Connection { ___prev_! }
 
     public var state: ConnState {
         get { state_ }
@@ -139,12 +143,17 @@ public class Connection {
         }
     }
 
-    public init(ct: Conntrack? = nil, isBeforeNat: Bool, tup: PktTuple, nextNode: NodeRef) {
-        ct_ = ct
+    public init(ct: Conntrack, isBeforeNat: Bool, tup: PktTuple, nextNode: NodeRef) {
+        self.ct = ct
         self.isBeforeNat = isBeforeNat
         self.tup = tup
         self.nextNode = nextNode
-#if SWVS_DEBUG
+        if isBeforeNat {
+            isMigrating_ = .init(false)
+        } else {
+            isMigrating_ = nil
+        }
+#if GLOBAL_WEAK_CONN_DEBUG
         WeakConnRef.record(self)
 #endif
     }
@@ -203,12 +212,7 @@ public class Connection {
             self.timer = nil
 
             self.global_ = nil
-            if let nx = self.___next_, let pr = self.___prev_ {
-                nx.___prev_ = pr
-                pr.___next_ = nx
-            }
-            self.___next_ = nil
-            self.___prev_ = nil
+            self.node.removeSelf()
 
             if touchConntrack {
                 self.ct.conns.removeValue(forKey: self.tup)
@@ -253,6 +257,13 @@ public class Connection {
     }
 }
 
+public struct ConnectionServiceListNode: LinkedListNode {
+    public typealias V = Connection
+    public var vars = LinkedListNodeVars()
+    public static let fieldOffset = 0
+    public init() {}
+}
+
 public enum ConnState {
     case NONE
     case TCP_SYN_SENT
@@ -282,143 +293,113 @@ public struct FastOutput {
 }
 
 public class GlobalConntrack {
-    private var conns: [GlobalConntrackHash]
-    private let modsz: Int
+    private var map: GeneralLinkedHashMap<GlobalConntrackHash, GlobalConnEntryNode>
+
     init(params: VSwitchParams) {
         let size = Utils.findNextPowerOf2(params.conntrackGlobalHashSize)
-        modsz = size - 1
-        conns = [GlobalConntrackHash](repeating: GlobalConntrackHash(), count: size)
+        map = GeneralLinkedHashMap<GlobalConntrackHash, GlobalConnEntryNode>(size)
     }
 
-    public func put(conn: Connection) -> GlobalConnEntry {
+    public func record(conn: Connection) -> GlobalConnEntry {
         let tup = conn.tup
-        let i = tup.hashValue & modsz
-        return conns[i].add(conn)
+        let i = map.indexOf(key: tup)
+        return map[i].pointee.record(conn)
     }
 
-    public func putNoLock(conn: Connection) -> GlobalConnEntry {
+    public func recordNoLock(conn: Connection) -> GlobalConnEntry {
         let tup = conn.tup
-        let i = tup.hashValue & modsz
-        return conns[i].add(conn, lock: false)
+        let i = map.indexOf(key: tup)
+        return map[i].pointee.record(conn, lock: false)
     }
 
-    public func lookup(_ tup: PktTuple) -> (GlobalConnEntry, RWLockRef)? {
-        let i = tup.hashValue & modsz
-        return conns[i].find(tup)
+    public func lookup(_ tup: PktTuple) -> (Int, GlobalConnEntry, RWLockRef)? {
+        let i = map.indexOf(key: tup)
+        guard let res = map[i].pointee.lookup(tup) else {
+            return nil
+        }
+        let (e, l) = res
+        return (i, e, l)
     }
 
-    public func lookupWithLock(_ tup: PktTuple, withLock: PktTuple) -> (GlobalConnEntry, RWLockRef?)? {
-        let i = tup.hashValue & modsz
-        let locked = withLock.hashValue & modsz
+    public func lookup(_ tup: PktTuple, withLockedIndex locked: Int) -> (Int, GlobalConnEntry, RWLockRef?)? {
+        let i = map.indexOf(key: tup)
         if i == locked {
-            if let res = conns[i].findNoLock(tup) {
-                return (res, nil)
+            if let res = map[i].pointee[tup] {
+                return (i, res, nil)
             } else {
                 return nil
             }
         } else {
-            return conns[i].find(tup)
+            if let res = map[i].pointee.lookup(tup) {
+                let (e, l) = res
+                return (i, e, l)
+            } else {
+                return nil
+            }
         }
     }
 
     deinit {
-        for c in conns {
-            c.destroy()
-        }
+        map.destroy()
     }
 }
 
-public struct GlobalConntrackHash {
-    var lock: RWLockRef
-    var head: GlobalConnEntry
+public struct GlobalConntrackHash: LinkedHashProtocol {
+    private var lock_: RWLockRef?
+    var lock: RWLockRef { lock_! }
+    public var list: LinkedList<GlobalConnEntryNode>
 
-    init() {
-        let lock = RWLockRef()
-        self.lock = lock
-        head = GlobalConnEntry(nil, lock: lock)
-        head.next = head
-        head.prev = head
+    public mutating func initStruct() {
+        lock_ = RWLockRef()
     }
 
-    public mutating func add(_ conn: Connection, lock: Bool = true) -> GlobalConnEntry {
+    public mutating func record(_ conn: Connection, lock: Bool = true) -> GlobalConnEntry {
         let entry = GlobalConnEntry(conn, lock: self.lock)
 
         if lock {
             self.lock.wlock()
         }
 
-        let tail = head.prev!
-        tail.next = entry
-        entry.prev = tail
-        entry.next = head
-        head.prev = entry
+        entry.node.insertInto(list: &list)
 
         if lock {
             self.lock.unlock()
         }
 
+        ENSURE_REFERENCE_COUNTED(entry)
         return entry
     }
 
-    public func find(_ tup: PktTuple) -> (GlobalConnEntry, RWLockRef)? {
+    public mutating func lookup(_ tup: PktTuple) -> (GlobalConnEntry, RWLockRef)? {
         lock.rlock()
-
-        var n = head.next!
-        while n !== head {
+        for n in list.seq() {
             if n.conn.tup == tup {
                 return (n, lock)
             }
-            n = n.next!
         }
         lock.unlock()
         return nil
     }
 
-    public func findNoLock(_ tup: PktTuple) -> GlobalConnEntry? {
-        var n = head.next!
-        while n !== head {
-            if n.conn.tup == tup {
-                return n
-            }
-            n = n.next!
-        }
-        return nil
-    }
-
-    public func destroy() {
-        // release refcnt
-        var n = head
-        while n.next != nil {
-            let tmp = n.next!
-            n.next = nil
-            n = tmp
-        }
-        n = head
-        while n.prev != nil {
-            let tmp = n.prev!
-            n.prev = nil
-            n = tmp
-        }
+    public mutating func destroy() {
+        list.destroy()
     }
 }
 
 public class GlobalConnEntry {
+    var node = GlobalConnEntryNode()
     private let lock: RWLockRef
-    private let conn_: Connection?
-    public var conn: Connection { conn_! }
-    public var prev: GlobalConnEntry?
-    public var next: GlobalConnEntry?
+    public let conn: Connection
     private let lastRedirectedFrom = ManagedAtomic<Int>(0)
     private let redirectedCount = ManagedAtomic<Int>(0)
-    let isMigrating = ManagedAtomic<Bool>(false)
 
-    init(_ conn: Connection?, lock: RWLockRef) {
-        conn_ = conn
+    init(_ conn: Connection, lock: RWLockRef) {
+        self.conn = conn
         self.lock = lock
     }
 
     public func needToMigrate(swIndex: Int) -> Bool {
-        if isMigrating.load(ordering: .relaxed) {
+        if conn.isMigrating.load(ordering: .relaxed) {
             return false
         }
         let last = lastRedirectedFrom.load(ordering: .relaxed)
@@ -429,7 +410,7 @@ public class GlobalConnEntry {
         }
         let cnt = redirectedCount.load(ordering: .relaxed)
         if cnt > 1024 {
-            let (exchanged, _) = isMigrating.compareExchange(expected: false, desired: true, ordering: .relaxed)
+            let (exchanged, _) = conn.isMigrating.compareExchange(expected: false, desired: true, ordering: .relaxed)
             if exchanged {
                 return true
             }
@@ -437,21 +418,20 @@ public class GlobalConnEntry {
         return false
     }
 
-    public func setMigrateState() -> Bool {
-        let (exchanged, _) = isMigrating.compareExchange(expected: false, desired: true, ordering: .relaxed)
-        return exchanged
-    }
-
-    public func unsetMigrateState() {
-        _ = isMigrating.compareExchange(expected: true, desired: false, ordering: .relaxed)
-    }
-
     public func removeSelf() {
         lock.wlock()
-        prev!.next = next
-        next!.prev = prev
-        next = nil
-        prev = nil
+        node.removeSelf()
         lock.unlock()
     }
+}
+
+public struct GlobalConnEntryNode: LinkedHashMapEntry {
+    public typealias K = PktTuple
+    public typealias V = GlobalConnEntry
+
+    public var vars = LinkedListNodeVars()
+    public init() {}
+
+    public static let fieldOffset = 0
+    public mutating func key() -> K { element().conn.tup }
 }

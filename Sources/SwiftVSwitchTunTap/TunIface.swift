@@ -22,6 +22,10 @@ public class TunIface: Iface, Hashable {
         return try TunIface(fd: TapTunFD.openTun(dev: dev))
     }
 
+    public static func of(fd: TapTunFD) -> TunIface {
+        return .init(fd: fd)
+    }
+
     private init(fd: TapTunFD) {
         self.fd = fd
         name = "tun:\(fd.dev)"
@@ -177,6 +181,9 @@ public class TunIfaceProvider: IfacePerThreadProvider {
         self.devPattern = devPattern
     }
 
+#if !os(Linux)
+    private var tun: TapTunFD?
+#endif
     public private(set) var name = ""
     private var devName = ""
     public func provide(tid: Int) throws(IOException) -> (any Iface)? {
@@ -184,9 +191,16 @@ public class TunIfaceProvider: IfacePerThreadProvider {
             let tun = try TunIface.open(dev: devPattern)
             devName = tun.fd.dev
             name = tun.name
+#if !os(Linux)
+            self.tun = tun.fd
+#endif
             return tun
         } else {
+#if os(Linux)
             return try TunIface.open(dev: devName)
+#else
+            return TunIface.of(fd: tun!)
+#endif
         }
     }
 }

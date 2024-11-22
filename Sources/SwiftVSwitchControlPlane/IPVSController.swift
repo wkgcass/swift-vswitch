@@ -147,16 +147,12 @@ struct IPVSController: RouteCollection, @unchecked Sendable {
 
             let conns = Box([ConnRef]())
             for svc in ns.ipvs.services.values {
-                let head = svc.connHead
-                var n = svc.connHead.next
-                while n !== head {
+                for n in svc.connList.seq() {
                     if !n.isBeforeNat {
-                        n = n.next
                         continue
                     }
                     let ref = formatConnection(n, withPeer: true)
                     conns.pointee.append(ref)
-                    n = n.next
                 }
             }
             return conns
@@ -196,16 +192,12 @@ struct IPVSController: RouteCollection, @unchecked Sendable {
                     continue
                 }
 
-                let head = svc.connHead
-                var n = head.next
-                while n !== head {
+                for n in svc.connList.seq() {
                     if !n.isBeforeNat {
-                        n = n.next
                         continue
                     }
                     let ref = formatConnection(n, withPeer: true)
                     conns.pointee.append(ref)
-                    n = n.next
                 }
             }
             return conns

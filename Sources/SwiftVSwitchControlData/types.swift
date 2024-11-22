@@ -180,3 +180,12 @@ public final class ConnRef: Content {
         self.peer = peer
     }
 }
+
+public struct RedirectCost: Content {
+    public var redirectCount: Int64
+    public var redirectCostUSecs: Int64
+    public init(redirectCount: Int64, redirectCostUSecs: Int64) {
+        self.redirectCount = redirectCount
+        self.redirectCostUSecs = redirectCostUSecs
+    }
+}

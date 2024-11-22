@@ -10,12 +10,15 @@ struct DebugController: RouteCollection, @unchecked Sendable {
 
     func boot(routes: any Vapor.RoutesBuilder) throws {
         let api = routes.grouped("apis", "v1.0", "debug")
-#if SWVS_DEBUG
+#if GLOBAL_WEAK_CONN_DEBUG
         api.get("connections", use: debugConnections)
+#endif
+#if REDIRECT_TIME_COST_DEBUG
+        api.get("redirect", "cost", use: debugRedirectCost)
 #endif
     }
 
-#if SWVS_DEBUG
+#if GLOBAL_WEAK_CONN_DEBUG
     private func debugConnections(req _: Request) async throws -> [ConnRef] {
         WeakConnRef.lock.lock()
         var results = [ConnRef]()
@@ -28,6 +31,12 @@ struct DebugController: RouteCollection, @unchecked Sendable {
         }
         WeakConnRef.lock.unlock()
         return results
+    }
+#endif
+
+#if REDIRECT_TIME_COST_DEBUG
+    private func debugRedirectCost(req _: Request) async throws -> RedirectCost {
+        return RedirectCost(redirectCount: sw.redirectCount.load(ordering: .relaxed), redirectCostUSecs: sw.redirectCostUSecs.load(ordering: .relaxed))
     }
 #endif
 }

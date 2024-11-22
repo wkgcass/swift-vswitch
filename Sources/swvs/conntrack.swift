@@ -12,6 +12,12 @@ extension Client {
         if first.hasPrefix("-L") {
             let show = try ConntrackShow.parse([String](argv))
             try await show.run(self, netstack: id)
+        } else if first == "-h" || first == "--help" {
+            print("""
+                [ip netns exec] ns<n> conntrack -Ln
+                conntrack -Ln --debug
+            """)
+            return
         } else {
             throw IllegalArgumentException("unknown conntrack arguments: \(argv)")
         }

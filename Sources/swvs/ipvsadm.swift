@@ -33,6 +33,18 @@ extension Client {
         } else if first.hasPrefix("-l") || first.hasPrefix("-L") {
             let res = try IpvsadmShow.parse([String](argv))
             try await res.run(self, netstack: id)
+        } else if first == "-h" || first == "--help" {
+            print("""
+                [ip netns exec] ns<n> ipvsadm -ln
+                [ip netns exec] ns<n> ipvsadm -ln <-t|-u> <vs>
+                [ip netns exec] ns<n> ipvsadm -A <-t|-u> <vs> [-s sched]
+                [ip netns exec] ns<n> ipvsadm -E <-t|-u> <vs> [-s sched]
+                [ip netns exec] ns<n> ipvsadm -D <-t|-u> <vs>
+                [ip netns exec] ns<n> ipvsadm -a <-t|-u> <vs> -r <rs> -w <weight> <--fullnat|--masquerading>
+                [ip netns exec] ns<n> ipvsadm -e <-t|-u> <vs> -r <rs> [-w <weight>]
+                [ip netns exec] ns<n> ipvsadm -d <-t|-u> <vs> -r <rs>
+            """)
+            return
         } else {
             throw IllegalArgumentException("unknown arguments for ipvsadm: \(argv)")
         }

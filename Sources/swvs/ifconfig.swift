@@ -7,6 +7,12 @@ extension Client {
         guard let first = argv.first else {
             return try await showAllIfaces(inNetns: id, argv)
         }
+        if first == "-h" || first == "--help" {
+            print("""
+                [ip netns exec] ifconfig [dev]
+            """)
+            return
+        }
         return try await showIface(inNetns: id, ifname: first, argv.dropFirst())
     }
 

@@ -16,6 +16,10 @@ public class VSwitch {
     private var master_: VSwitchPerThread? // is also inside 'threads' array
     private var master: VSwitchPerThread { master_! }
     private let ifIndex = ManagedAtomic<UInt32>(0)
+#if REDIRECT_TIME_COST_DEBUG
+    public let redirectCount = ManagedAtomic<Int64>(0)
+    public let redirectCostUSecs = ManagedAtomic<Int64>(0)
+#endif
 
     public init(params: VSwitchParams) throws(IOException) {
         self.params = params
@@ -313,6 +317,11 @@ public class VSwitchPerThread {
         while true {
             let re = redirected.pop()
             guard let re else { break }
+#if REDIRECT_TIME_COST_DEBUG
+            let redirectCost = OS.currentTimeUSecs() - re.enqueueTs
+            sw.redirectCount.wrappingIncrement(by: 1, ordering: .relaxed)
+            sw.redirectCostUSecs.wrappingIncrement(by: redirectCost, ordering: .relaxed)
+#endif
             let pkb = re.pkb
             assert(pkb.conn != nil)
             if pkb.conn!.destroyed {
@@ -334,7 +343,7 @@ public class VSwitchPerThread {
 
         var pkb = pkb
         if !pkb.buf.shareable() {
-            pkb = PacketBuffer(pkb)
+            pkb = PacketBuffer(pkb, tryToUseThreadLocalBufferPool: false)
         }
         redirected.push(PacketBufferForRedirecting(pkb))
         loop.wakeup()

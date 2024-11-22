@@ -5,8 +5,8 @@ import VProxyCommon
 struct TestRoute {
     @Test func v4route() {
         let v4route = RouteTable()!
-        let iface1Ex = IfaceEx(DummyIface(), toBridge: 1)
-        let iface2Ex = IfaceEx(DummyIface(), toBridge: 2)
+        let iface1Ex = IfaceEx(1, DummyIface(), toBridge: 1)
+        let iface2Ex = IfaceEx(2, DummyIface(), toBridge: 2)
         v4route.addRule(RouteTable.RouteRule(rule: GetNetwork(from: "192.168.3.0/24")!, dev: iface1Ex,
                                              src: GetIP(from: "192.168.3.254")!))
         v4route.addRule(RouteTable.RouteRule(rule: GetNetwork(from: "192.168.4.0/24")!, dev: iface2Ex,
@@ -28,8 +28,8 @@ struct TestRoute {
 
     @Test func v6route() {
         let v6route = RouteTable()!
-        let iface1Ex = IfaceEx(DummyIface(), toBridge: 1)
-        let iface2Ex = IfaceEx(DummyIface(), toBridge: 2)
+        let iface1Ex = IfaceEx(1, DummyIface(), toBridge: 1)
+        let iface2Ex = IfaceEx(2, DummyIface(), toBridge: 2)
         v6route.addRule(RouteTable.RouteRule(rule: GetNetwork(from: "fd00::a:3:0/112")!, dev: iface1Ex,
                                              src: GetIP(from: "fd00::a:3:fe")!))
         v6route.addRule(RouteTable.RouteRule(rule: GetNetwork(from: "fd00::a:4:0/112")!, dev: iface2Ex,

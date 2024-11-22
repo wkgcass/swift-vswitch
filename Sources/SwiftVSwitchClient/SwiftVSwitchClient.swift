@@ -63,6 +63,11 @@ public class SwiftVSwitchClient {
         return try resp.content.decode([ConnRef].self)
     }
 
+    public func runDebugRedirectCost() async throws -> RedirectCost {
+        let resp = try await client.get("\(baseUrl)/apis/v1.0/debug/redirect/cost")
+        return try resp.content.decode(RedirectCost.self)
+    }
+
     deinit {
         app.shutdown()
     }

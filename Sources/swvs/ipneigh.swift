@@ -4,7 +4,14 @@ import VProxyCommon
 
 extension Client {
     func runIPNeighShowAll(_ id: UInt32, _ argv: ArraySlice<String>) async throws {
-        if let _ = argv.first {
+        if let first = argv.first {
+            if first == "help" {
+                print("""
+                    [ip netns exec] ns<n> ip neigh show
+                    [ip netns exec] ns<n> ip neigh add <ip> dev <dev> lladdr <mac>
+                """)
+                return
+            }
             throw IllegalArgumentException("unexpected redundant arguments: \(argv)")
         }
         let neighbors = try await client.showAllNeighbors(netstack: id)

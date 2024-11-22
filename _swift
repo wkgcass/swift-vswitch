@@ -1,0 +1,27 @@
+#!/bin/bash
+
+action="$1"
+if [ "$action" == "" ]; then
+	swift
+	exit $?
+fi
+
+run_with_env=""
+if [ "$action" == "run" ]; then
+	run_with_env="/usr/bin/env SWIFT_BACKTRACE=enable=yes,unwind=fast"
+fi
+
+shift
+set -e
+
+if [ "$action" == "build" ] || [ "$action" == "run" ]; then
+	set -x
+	sudo $run_with_env swift $action \
+		-Xswiftc '-cross-module-optimization' \
+		-Xswiftc '-whole-module-optimization' \
+		-Xswiftc '-Ounchecked' \
+		"$@"
+else
+	set -x
+	sudo swift $action "$@"
+fi

@@ -1,3 +1,4 @@
+import SwiftLinkedListAndHash
 import VProxyCommon
 
 public class Service {
@@ -11,7 +12,7 @@ public class Service {
     public private(set) var localipv4: IPPool
     public private(set) var localipv6: IPPool
     public var statistics = ServiceStatistics()
-    public let connHead: Connection
+    public var connList = LinkedList<ConnectionServiceListNode>()
 
     public init(proto: UInt8, vip: any IP, port: UInt16, sched: DestScheduler,
                 portMask: UInt16, portFill: UInt16)
@@ -22,12 +23,8 @@ public class Service {
         self.sched = sched
         localipv4 = IPPool(portMask: portMask, portFill: portFill)
         localipv6 = IPPool(portMask: portMask, portFill: portFill)
-        connHead = Connection(
-            ct: nil, isBeforeNat: false, tup: PktTuple(proto: 0, srcPort: 0, dstPort: 0, srcIp: IPv4.ANY, dstIp: IPv4.ANY), nextNode: NodeRef("nil")
-        )
-        connHead.___next_ = connHead
-        connHead.___prev_ = connHead
 
+        connList.selfInit()
         self.sched.initWith(svc: self)
     }
 
@@ -93,24 +90,12 @@ public class Service {
     }
 
     public func recordConn(_ conn: Connection) {
-        let tail = connHead.prev
-        tail.___next_ = conn
-        conn.___next_ = connHead
-        connHead.___prev_ = conn
-        conn.___prev_ = tail
+        conn.node.addInto(list: &connList)
+        ENSURE_REFERENCE_COUNTED(conn)
     }
 
     public func destroy() {
-        let head = connHead
-        var n = connHead.next
-        head.___next_ = nil
-        head.___prev_ = nil
-        while n !== head {
-            let nx = n.next
-            n.___next_ = nil
-            n.___prev_ = nil
-            n = nx
-        }
+        connList.destroy()
     }
 }
 
