@@ -12,6 +12,7 @@ public class PosixFDs: FDs, FDsWithOpts, FDsWithCoreAffinity {
 
     private init() {
         pthread_key_create(&threadLocalKey, nil)
+        signal(SIGPIPE, SIG_IGN)
     }
 
     public static func setup() {
