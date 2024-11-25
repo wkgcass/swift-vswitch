@@ -110,8 +110,7 @@ struct VirtualServerSample: AsyncParsableCommand {
         sw.start()
 
         sw.ensureNetstack(id: 1)
-        var portFill: UInt16 = 1
-        sw.configure { _, sw in
+        sw.configure { idx, sw in
             let netstack = sw.netstacks[1]!
             for vipmask in vips {
                 for proto in [IP_PROTOCOL_TCP, IP_PROTOCOL_UDP] {
@@ -119,9 +118,8 @@ struct VirtualServerSample: AsyncParsableCommand {
                                       vip: vipmask!.ip,
                                       port: port,
                                       sched: WeightedRoundRobinDestScheduler(),
-                                      portMask: 0xff80,
-                                      portFill: portFill)
-                    portFill += 1
+                                      totalWorkerCount: coreAffinity.count,
+                                      currentWorkerIndex: idx)
                     _ = netstack.ipvs.addService(svc)
                     for destIpPortWeight in dests {
                         let destIpPortWeight = destIpPortWeight!

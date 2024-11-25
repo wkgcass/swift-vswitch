@@ -14,6 +14,14 @@ public class Service {
     public var statistics = ServiceStatistics()
     public var connList = LinkedList<ConnectionServiceListNode>()
 
+    public convenience init(proto: UInt8, vip: any IP, port: UInt16, sched: DestScheduler,
+                            totalWorkerCount: Int, currentWorkerIndex: Int)
+    {
+        let powerOf2 = Utils.findNextPowerOf2(totalWorkerCount)
+        let portMask = UInt16((~(powerOf2 - 1)) & 0xffff)
+        self.init(proto: proto, vip: vip, port: port, sched: sched, portMask: portMask, portFill: UInt16(currentWorkerIndex + 1))
+    }
+
     public init(proto: UInt8, vip: any IP, port: UInt16, sched: DestScheduler,
                 portMask: UInt16, portFill: UInt16)
     {

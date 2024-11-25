@@ -1,5 +1,5 @@
 {
-  "originHash" : "1eb2f7b25569b6c0db970388488d907fa7fd2d3db5594a4f62a57d42b6166540",
+  "originHash" : "e5cefb057b385ed9f951d5b39011b3e7cea70bcf7fd8686c920a77a3415402ba",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -195,16 +195,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vproxy-tools/SwiftLinkedListAndHash",
       "state" : {
-        "revision" : "c72785ae7f785963584852f731546182620839b5"
-      }
-    },
-    {
-      "identity" : "swiftpriorityqueue",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/davecom/SwiftPriorityQueue.git",
-      "state" : {
-        "branch" : "1.4.0",
-        "revision" : "42e8789c6d2464254c2e0322bd824ec509de678b"
+        "revision" : "f028e7c295bae6861dc7e3bf4a8e7d7e27ec09a8"
       }
     },
     {

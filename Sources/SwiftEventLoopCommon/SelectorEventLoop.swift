@@ -1,12 +1,11 @@
 import Atomics
-import SwiftPriorityQueue
 import VProxyCommon
 
 public class SelectorEventLoop {
     private let selector: WrappedSelector
     private let fds: FDs
     private let initOptions: SelectorOptions
-    private let timeQueue: any TimeQueue<Runnable> = TimeQueueImpl()
+    private let timeQueue = TimeQueue()
     private let runOnLoopEvents: ConcurrentQueue<Runnable> = ConcurrentQueue()
     private var forEachLoopEvents = [ForEachPollEvent]()
 
@@ -79,11 +78,18 @@ public class SelectorEventLoop {
 
     private func handleTimeEvents() {
         let curr = Global.currentTimestamp
+#if !USE_TIMEQUEUE
+        let list = timeQueue.poll(currentTimeMillis: curr)
+        for t in list.seq() {
+            tryRunnable(t.get())
+        }
+#else
         while timeQueue.nextTime(currentTimeMillis: curr) <= 0 {
             if let r = timeQueue.poll() {
                 tryRunnable(r)
             }
         }
+#endif
     }
 
     private func handleForEachLoopEvents() {
@@ -178,13 +184,13 @@ public class SelectorEventLoop {
 
         let selected: Int
         do {
-            if timeQueue.isEmpty() && runOnLoopEvents.isEmpty() && maxSleepMillis < 0 {
+            let nextTimeEvent = timeQueue.nextTime(currentTimeMillis: Global.currentTimestamp)
+            if nextTimeEvent == Int64.max && runOnLoopEvents.isEmpty() && maxSleepMillis < 0 {
                 selected = try selector.select(&selectedEntries) // let it sleep
             } else if !runOnLoopEvents.isEmpty() {
                 selected = try selector.selectNow(&selectedEntries) // immediately return when tasks registered into the loop
             } else {
-                let time = timeQueue.nextTime(currentTimeMillis: Global.currentTimestamp)
-                let finalTime = time > maxSleepMillis && maxSleepMillis >= 0 ? maxSleepMillis : time
+                let finalTime = nextTimeEvent > maxSleepMillis && maxSleepMillis >= 0 ? maxSleepMillis : nextTimeEvent
                 if finalTime == 0 {
                     selected = try selector.selectNow(&selectedEntries) // immediately return
                 } else {

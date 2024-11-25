@@ -1,5 +1,5 @@
 public class TimerEvent {
-    private var event: (any TimeElem)?
+    private var event: TimeElem?
     private let eventLoop: SelectorEventLoop
     private var canceled = false
 
@@ -7,7 +7,7 @@ public class TimerEvent {
         self.eventLoop = eventLoop
     }
 
-    func setEvent(_ event: any TimeElem) {
+    func setEvent(_ event: TimeElem) {
         if canceled {
             event.removeSelf() // this is invoked on event loop, so it's safe
             return

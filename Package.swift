@@ -23,12 +23,12 @@ let package = Package(
         .executable(name: "sample-vs", targets: ["Sample_VirtualServer"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/davecom/SwiftPriorityQueue.git", revision: "1.4.0"),
+        // .package(url: "https://github.com/davecom/SwiftPriorityQueue.git", revision: "1.4.0"),
         .package(url: "https://github.com/apple/swift-collections.git", revision: "1.1.4"),
         .package(url: "https://github.com/apple/swift-argument-parser", revision: "1.5.0"),
         .package(url: "https://github.com/apple/swift-atomics", revision: "1.2.0"),
         .package(url: "https://github.com/vapor/vapor", revision: "4.106.3"),
-        .package(url: "https://github.com/vproxy-tools/SwiftLinkedListAndHash", revision: "c72785ae7f785963584852f731546182620839b5"),
+        .package(url: "https://github.com/vproxy-tools/SwiftLinkedListAndHash", revision: "f028e7c295bae6861dc7e3bf4a8e7d7e27ec09a8"),
     ],
     targets: [
         // common utilities
@@ -46,7 +46,7 @@ let package = Package(
             name: "SwiftEventLoopCommon",
             dependencies: [
                 "VProxyCommon",
-                "SwiftPriorityQueue",
+                // "SwiftPriorityQueue",
                 .product(name: "Atomics", package: "swift-atomics"),
             ]
         ),

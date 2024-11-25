@@ -16,12 +16,12 @@ set -e
 
 if [ "$action" == "build" ] || [ "$action" == "run" ]; then
 	set -x
-	sudo $run_with_env swift $action \
+	$run_with_env swift $action \
 		-Xswiftc '-cross-module-optimization' \
 		-Xswiftc '-whole-module-optimization' \
 		-Xswiftc '-Ounchecked' \
 		"$@"
 else
 	set -x
-	sudo swift $action "$@"
+	swift $action "$@"
 fi
