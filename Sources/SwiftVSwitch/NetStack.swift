@@ -20,7 +20,7 @@ public class NetStack {
         ips = IPManager()
         arpTable = ArpTable(loop: loop, params: params)
         routeTable = RouteTable()!
-        conntrack = Conntrack(sw: sw, global: shared.globalConntrack)
+        conntrack = Conntrack(sw: sw, params: params, global: shared.globalConntrack)
         ipvs = IPVS()
     }
 

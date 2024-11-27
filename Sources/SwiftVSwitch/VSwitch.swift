@@ -563,6 +563,7 @@ public struct VSwitchParams {
     public var arpTableTimeoutMillis: Int
     public var arpRefreshCacheMillis: Int
     public var conntrackGlobalHashSize: Int
+    public var conntrackHashSize: Int
 
     public var ethsw: () -> NodeManager
     public var netstack: () -> NetStackNodeManager
@@ -573,6 +574,7 @@ public struct VSwitchParams {
         arpTableTimeoutMillis: Int = 4 * 3600 * 1000,
         arpRefreshCacheMillis: Int = 60 * 1000,
         conntrackGlobalHashSize: Int = 1_048_576,
+        conntrackHashSize: Int = 1_048_576,
         ethsw: @escaping () -> NodeManager,
         netstack: @escaping () -> NetStackNodeManager
     ) {
@@ -581,6 +583,7 @@ public struct VSwitchParams {
         self.arpTableTimeoutMillis = arpTableTimeoutMillis
         self.arpRefreshCacheMillis = arpRefreshCacheMillis
         self.conntrackGlobalHashSize = conntrackGlobalHashSize
+        self.conntrackHashSize = conntrackHashSize
         self.ethsw = ethsw
         self.netstack = netstack
     }

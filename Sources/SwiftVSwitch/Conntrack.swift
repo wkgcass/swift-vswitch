@@ -6,11 +6,12 @@ import VProxyCommon
 public class Conntrack {
     public unowned let sw: VSwitchPerThread
     public let global: GlobalConntrack
-    var conns = [PktTuple: Connection]()
+    var conns: LinkedHashMap<ConnectionHashNode>
 
-    init(sw: VSwitchPerThread, global: GlobalConntrack) {
+    init(sw: VSwitchPerThread, params: VSwitchParams, global: GlobalConntrack) {
         self.sw = sw
         self.global = global
+        conns = LinkedHashMap(params.conntrackHashSize)
     }
 
     public func lookup(_ tup: PktTuple) -> Connection? {
@@ -18,18 +19,9 @@ public class Conntrack {
     }
 
     public func put(_ conn: Connection) {
-        let tup = conn.tup
-        let oldConn = conns.removeValue(forKey: tup)
-        if let oldConn {
-            if let peer = oldConn.peer {
-                peer.destroy(touchConntrack: true, touchPeer: false)
-            }
-            oldConn.destroy(touchConntrack: false, touchPeer: false)
-        }
-
         let entry = global.record(conn: conn)
         conn.__setGlobal(entry)
-        conns[tup] = conn
+        conn.hashNode.insertInto(map: &conns)
     }
 
     // the isMigrating field should be already set, and locks should be properly retrieved before calling this function
@@ -42,9 +34,9 @@ public class Conntrack {
         let newgconn = global.recordNoLock(conn: newConn)
         newConn.__setGlobal(newgconn)
 
-        conns[newConn.tup] = newConn
+        newConn.hashNode.insertInto(map: &conns)
         anotherConn.ct.sw.loop.runOnLoop {
-            anotherConn.destroy(touchConntrack: true, touchPeer: false)
+            anotherConn.destroy(touchPeer: false)
             if let peer {
                 peer.peer = newConn
                 if !newConn.isBeforeNat { // always use isBeforeNat conn's isMigrating field
@@ -53,6 +45,10 @@ public class Conntrack {
             }
         }
         return newConn
+    }
+
+    deinit {
+        conns.destroy()
     }
 }
 
@@ -89,6 +85,8 @@ public struct WeakConnRef {
 public class Connection {
     // record the conn in service
     var node = ConnectionServiceListNode()
+    // record the conn in conntrack
+    var hashNode = ConnectionHashNode()
 
     private let destroyed_ = ManagedAtomic<Bool>(false)
     public var destroyed: Bool { destroyed_.load(ordering: .relaxed) }
@@ -194,7 +192,7 @@ public class Connection {
         }
     }
 
-    public func destroy(touchConntrack: Bool, touchPeer: Bool) {
+    public func destroy(touchPeer: Bool) {
         let (exchanged, _) = destroyed_.compareExchange(expected: false, desired: true, ordering: .relaxed)
         if !exchanged {
             return
@@ -214,12 +212,10 @@ public class Connection {
             self.global_ = nil
             self.node.removeSelf()
 
-            if touchConntrack {
-                self.ct.conns.removeValue(forKey: self.tup)
-            }
+            self.hashNode.removeSelf()
         }
         if touchPeer, let peer {
-            peer.destroy(touchConntrack: touchConntrack, touchPeer: false)
+            peer.destroy(touchPeer: false)
         }
     }
 
@@ -241,7 +237,7 @@ public class Connection {
                     resetTimer()
                     return
                 }
-                parent.destroy(touchConntrack: true, touchPeer: true)
+                parent.destroy(touchPeer: true)
             }
         }
     }
@@ -262,6 +258,19 @@ public struct ConnectionServiceListNode: LinkedListNode {
     public var vars = LinkedListNodeVars()
     public static let fieldOffset = 0
     public init() {}
+}
+
+public struct ConnectionHashNode: LinkedHashMapEntry {
+    public typealias K = PktTuple
+    public typealias V = Connection
+    public var vars = LinkedListNodeVars()
+
+    public init() {}
+    public mutating func key() -> PktTuple {
+        return element().tup
+    }
+
+    public static let fieldOffset: Int = 16
 }
 
 public enum ConnState {
@@ -302,19 +311,17 @@ public class GlobalConntrack {
 
     public func record(conn: Connection) -> GlobalConnEntry {
         let tup = conn.tup
-        let i = map.indexOf(key: tup)
-        return map[i].pointee.record(conn)
+        return map.hash(of: tup).pointee.record(conn)
     }
 
     public func recordNoLock(conn: Connection) -> GlobalConnEntry {
         let tup = conn.tup
-        let i = map.indexOf(key: tup)
-        return map[i].pointee.record(conn, lock: false)
+        return map.hash(of: tup).pointee.record(conn, lock: false)
     }
 
     public func lookup(_ tup: PktTuple) -> (Int, GlobalConnEntry, RWLockRef)? {
         let i = map.indexOf(key: tup)
-        guard let res = map[i].pointee.lookup(tup) else {
+        guard let res = map.hash(ofIndex: i).pointee.lookup(tup) else {
             return nil
         }
         let (e, l) = res
@@ -324,13 +331,13 @@ public class GlobalConntrack {
     public func lookup(_ tup: PktTuple, withLockedIndex locked: Int) -> (Int, GlobalConnEntry, RWLockRef?)? {
         let i = map.indexOf(key: tup)
         if i == locked {
-            if let res = map[i].pointee[tup] {
+            if let res = map.hash(ofIndex: i).pointee[tup] {
                 return (i, res, nil)
             } else {
                 return nil
             }
         } else {
-            if let res = map[i].pointee.lookup(tup) {
+            if let res = map.hash(ofIndex: i).pointee.lookup(tup) {
                 let (e, l) = res
                 return (i, e, l)
             } else {

@@ -8,7 +8,7 @@ fi
 
 run_with_env=""
 if [ "$action" == "run" ]; then
-	run_with_env="/usr/bin/env SWIFT_BACKTRACE=enable=yes,unwind=fast"
+	run_with_env="/usr/bin/env SWIFT_BACKTRACE=enable=yes"
 fi
 
 shift

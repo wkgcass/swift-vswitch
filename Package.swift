@@ -28,7 +28,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", revision: "1.5.0"),
         .package(url: "https://github.com/apple/swift-atomics", revision: "1.2.0"),
         .package(url: "https://github.com/vapor/vapor", revision: "4.106.3"),
-        .package(url: "https://github.com/vproxy-tools/SwiftLinkedListAndHash", revision: "f028e7c295bae6861dc7e3bf4a8e7d7e27ec09a8"),
+        .package(url: "https://github.com/vproxy-tools/SwiftLinkedListAndHash", revision: "83ed25c445ee1ea0b77505ecb9d1a60fbb0dea58"),
     ],
     targets: [
         // common utilities
